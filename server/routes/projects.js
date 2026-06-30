@@ -198,6 +198,8 @@ async function launchProject(directory) {
         sessionId = ses?.id;
       }
       await killPortProcess(INIT_PORT);
+    } else {
+      console.warn('[projects] INIT_PORT 4005 still stuck after kill — new project session may be missing');
     }
   }
 

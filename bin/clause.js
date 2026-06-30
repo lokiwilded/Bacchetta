@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
+if (parseInt(process.versions.node) < 18) {
+  console.error('  clause requires Node.js 18 or later. Current: ' + process.version);
+  process.exit(1);
+}
+
 const { execSync, spawn }                                        = require('child_process');
 const { existsSync, mkdirSync, readFileSync, writeFileSync,
         readdirSync, copyFileSync }                              = require('fs');
@@ -72,6 +77,15 @@ async function cmdInstall() {
   // opencode
   const hasOpencode = checkCmd('opencode');
   console.log(`  ${hasOpencode ? '✓' : '✗'} opencode ${hasOpencode ? 'found' : 'not found  (install: npm install -g opencode-ai)'}`);
+
+  if (hasOpencode) {
+    let hasServe = false;
+    try { execSync('opencode serve --help', { stdio: 'ignore', timeout: 5000 }); hasServe = true; } catch {}
+    if (!hasServe) {
+      console.log('  ⚠ opencode found but `opencode serve` is not available.');
+      console.log('    Make sure you have opencode-ai >= 0.3.0: npm install -g opencode-ai\n');
+    }
+  }
 
   // Ollama + bge-m3
   let ollamaOk = false;
@@ -194,6 +208,10 @@ async function cmdInstall() {
     }
     if (!ocConfig.model)       ocConfig.model       = 'ollama-cloud/glm-5.2';
     if (!ocConfig.small_model) ocConfig.small_model = 'ollama-cloud/deepseek-v4-flash';
+  } else {
+    // Local Ollama — write the user's chosen model to opencode.json
+    if (!ocConfig.model)       ocConfig.model       = `ollama/${primaryModel}`;
+    if (!ocConfig.small_model) ocConfig.small_model = `ollama/${fastModel}`;
   }
 
   // Always merge plugin list — add missing, preserve order, no duplicates

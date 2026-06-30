@@ -66,15 +66,14 @@ System prompt body here.
 
 ## Memory system
 
-Background job in `server/index.js` (`memoryExtractionTick`, runs every 30s):
-- **Triggers:** sessions idle for `memory_idle_minutes` (default 5 min), OR sessions approaching `compact_after` turn count
-- **Writes:** markdown to `~/.local/share/opencode/clause-memory/<sha1>.md`
-- **Embeds:** calls `indexMemoryFile()` → Ollama bge-m3 embeddings → `clause-memory.db` SQLite
-- **Profiles:** calls `extractProfile()` → LLM extracts 3–5 patterns → `upsertProfile()` with compound confidence scoring
+Memory is handled by the **opencode-mem** plugin (installed by `clause install`). It:
+- Auto-captures memories from conversations as you work
+- Uses local Ollama bge-m3 for embeddings (free, runs on GPU)
+- Uses Ollama Cloud deepseek-v4-flash (or your local model) for extraction
+- Has its own web UI at http://localhost:4747
+- Injects relevant memories at the start of each new session
 
-`server/routes/memory-db.js` exports pure functions (`parseChunks`, `cosine`, `bufToVec`, `indexMemoryFile`, `searchMemory`, `upsertProfile`) — all tested.
-
-Model priority for extraction: `settings.memory_model` → primary agent's model → session's model → `qwen2.5:7b`.
+Config lives at `~/.config/opencode/opencode-mem.jsonc`. No clause-side extraction job runs — opencode-mem owns all memory operations.
 
 ## Settings
 

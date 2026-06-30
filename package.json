@@ -1,5 +1,5 @@
 {
-  "name": "clause",
+  "name": "clause-ai",
   "version": "0.1.0",
   "description": "Multi-agent AI coding dashboard for OpenCode — works with Ollama Cloud, local Ollama, or any OpenCode-supported provider",
   "keywords": ["opencode", "ai", "dashboard", "claude", "ollama", "llm", "developer-tools"],

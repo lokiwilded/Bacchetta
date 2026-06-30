@@ -1,7 +1,7 @@
 ---
 description: Extracts and stores key project facts before context compression.
 mode: subagent
-model: 
+model: ollama-cloud/deepseek-v4-flash
 permission:
   edit: deny
   write: deny

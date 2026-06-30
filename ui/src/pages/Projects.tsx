@@ -13,7 +13,7 @@ function chatUrl(port: number, sessionId?: string, directory?: string): string {
   if (!sessionId || !directory) return base
   // OpenCode encodes the directory as base64 of the Windows path (backslashes)
   const winDir = directory.replace(/\//g, '\\')
-  const b64dir = btoa(winDir)
+  const b64dir = btoa(unescape(encodeURIComponent(winDir)))
   return `${base}/${b64dir}/session/${sessionId}`
 }
 
@@ -493,6 +493,7 @@ function ProjectCard({
                 const label = s.title.replace(/^New session - /, '').replace('T', ' ').slice(0, 16)
                 return (
                   <a key={s.id} href={url} target={url ? '_blank' : undefined} rel="noopener noreferrer"
+                    title={url ? undefined : 'Start this project to open session'}
                     className={`flex items-center gap-3 px-4 py-2.5 transition-colors group ${url ? 'hover:bg-s1' : 'opacity-50 cursor-default'}`}>
                     <span className="text-accent text-xs flex-shrink-0">▶</span>
                     <div className="flex-1 min-w-0">
