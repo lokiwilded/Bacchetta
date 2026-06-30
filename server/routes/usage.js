@@ -3,37 +3,28 @@
 const path = require('node:path');
 const Database = require('better-sqlite3');
 
-// Per-million-token pricing for common models (input, output)
-const PRICING = {
-  'claude-opus-4':     { in: 15,   out: 75  },
-  'claude-opus-3-5':   { in: 15,   out: 75  },
-  'claude-sonnet-4':   { in: 3,    out: 15  },
-  'claude-sonnet-3-5': { in: 3,    out: 15  },
-  'claude-haiku-4':    { in: 0.8,  out: 4   },
-  'claude-haiku-3-5':  { in: 0.8,  out: 4   },
-  'gpt-4o':            { in: 2.5,  out: 10  },
-  'gpt-4o-mini':       { in: 0.15, out: 0.6 },
-  'gpt-4-turbo':       { in: 10,   out: 30  },
-  'o1':                { in: 15,   out: 60  },
-  'o1-mini':           { in: 3,    out: 12  },
-  'gemini-1.5-pro':    { in: 1.25, out: 5   },
-  'gemini-1.5-flash':  { in: 0.075,out: 0.3 },
+const OPUS_RATE   = { in: 15,  out: 75 };  // USD per million tokens
+const OLLAMA_GBP  = 15;                     // £/month Ollama Cloud subscription
+const GBP_PER_USD = 0.79;
+
+// Comparison API rates (USD per million tokens)
+const COMPARE = {
+  'Claude Opus 4.8': { in: 15,   out: 75,  color: '#f59e0b' },
+  'Claude Sonnet 4': { in: 3,    out: 15,  color: '#6366f1' },
+  'Gemini 1.5 Pro':  { in: 1.25, out: 5,   color: '#22d3ee' },
+  'GPT-4o':          { in: 2.5,  out: 10,  color: '#10b981' },
 };
 
-// Fallback "premium" rate for savings comparison — equivalent to Claude Opus
-const OPUS_RATE = { in: 15, out: 75 };
+// Subscription prices £/month
+const SUBSCRIPTIONS = {
+  'Claude Pro':    18,
+  'Google One AI': 19,
+  'ChatGPT Plus':  16,
+};
 
-function modelCost(modelId, i, o) {
-  const id = (modelId || '').toLowerCase();
-  for (const [key, rate] of Object.entries(PRICING)) {
-    if (id.includes(key)) return ((i || 0) / 1e6 * rate.in) + ((o || 0) / 1e6 * rate.out);
-  }
-  return null;
-}
-
-function opusCost(i, o) {
-  return ((i || 0) / 1e6 * OPUS_RATE.in) + ((o || 0) / 1e6 * OPUS_RATE.out);
-}
+function opusCost(i, o)       { return ((i||0)/1e6*OPUS_RATE.in) + ((o||0)/1e6*OPUS_RATE.out); }
+function apiCost(rate, i, o)  { return ((i||0)/1e6*rate.in)      + ((o||0)/1e6*rate.out); }
+function toGbp(usd)           { return usd * GBP_PER_USD; }
 
 module.exports.handler = async function handler(_req, res, _url, ctx) {
   try {
@@ -42,8 +33,7 @@ module.exports.handler = async function handler(_req, res, _url, ctx) {
     const byAgent = db.prepare(`
       SELECT COALESCE(agent,'unknown') as agent, json_extract(model,'$.id') as model_id,
         COUNT(*) as sessions, SUM(tokens_input) as input_tokens,
-        SUM(tokens_output) as output_tokens, SUM(tokens_cache_read) as cache_read,
-        SUM(cost) as actual_cost
+        SUM(tokens_output) as output_tokens, SUM(tokens_cache_read) as cache_read
       FROM session WHERE tokens_input > 0 OR tokens_output > 0
       GROUP BY agent, json_extract(model,'$.id')
       ORDER BY (SUM(tokens_input)+SUM(tokens_output)) DESC
@@ -60,73 +50,132 @@ module.exports.handler = async function handler(_req, res, _url, ctx) {
 
     const byDay = db.prepare(`
       SELECT date(time_created/1000,'unixepoch') as day, COUNT(*) as sessions,
-        SUM(tokens_input) as input_tokens, SUM(tokens_output) as output_tokens,
-        SUM(tokens_cache_read) as cache_read
+        SUM(tokens_input) as input_tokens, SUM(tokens_output) as output_tokens
       FROM session WHERE tokens_input > 0 OR tokens_output > 0
       GROUP BY day ORDER BY day DESC LIMIT 30
     `).all();
 
-    const sessionTimes = db.prepare(`
-      SELECT s.id, COALESCE(s.agent,'unknown') as agent, json_extract(s.model,'$.id') as model_id,
-        MIN((MAX(p.time_created)-MIN(p.time_created))/1000.0, 14400) as active_secs
-      FROM session s JOIN part p ON p.session_id = s.id
+    const byProject = db.prepare(`
+      SELECT pr.worktree, pr.id as project_id,
+        COUNT(s.id) as sessions,
+        SUM(s.tokens_input) as input_tokens,
+        SUM(s.tokens_output) as output_tokens,
+        SUM(s.tokens_cache_read) as cache_read,
+        MAX(s.time_updated) as last_active
+      FROM project pr
+      JOIN session s ON s.project_id = pr.id
       WHERE s.tokens_input > 0 OR s.tokens_output > 0
+      GROUP BY pr.id
+      ORDER BY (SUM(s.tokens_input)+SUM(s.tokens_output)) DESC
+      LIMIT 20
+    `).all();
+
+    const topSessionsRaw = db.prepare(`
+      SELECT s.id, s.title, COALESCE(s.agent,'unknown') as agent,
+        json_extract(s.model,'$.id') as model_id,
+        s.tokens_input, s.tokens_output, s.project_id,
+        date(s.time_created/1000,'unixepoch') as day
+      FROM session s
+      WHERE s.tokens_input > 0
+      ORDER BY s.tokens_input+s.tokens_output DESC
+      LIMIT 200
+    `).all();
+
+    const sessionTimes = db.prepare(`
+      SELECT s.id,
+        MIN((MAX(p.time_created)-MIN(p.time_created))/1000.0,14400) as active_secs
+      FROM session s JOIN part p ON p.session_id=s.id
+      WHERE s.tokens_input>0 OR s.tokens_output>0
       GROUP BY s.id
     `).all();
 
     const totals = db.prepare(`
-      SELECT COUNT(*) as total_sessions, COUNT(DISTINCT COALESCE(agent,'unknown')) as total_agents,
+      SELECT COUNT(*) as total_sessions,
+        COUNT(DISTINCT COALESCE(agent,'unknown')) as total_agents,
         COUNT(DISTINCT json_extract(model,'$.id')) as total_models,
         SUM(tokens_input) as total_input, SUM(tokens_output) as total_output,
-        SUM(tokens_cache_read) as total_cache_read, SUM(cost) as total_actual_cost,
+        SUM(tokens_cache_read) as total_cache_read,
         COUNT(DISTINCT date(time_created/1000,'unixepoch')) as active_days,
         MIN(date(time_created/1000,'unixepoch')) as first_day,
         MAX(date(time_created/1000,'unixepoch')) as last_day
-      FROM session WHERE tokens_input > 0 OR tokens_output > 0
+      FROM session WHERE tokens_input>0 OR tokens_output>0
     `).get();
-
-    const topSessions = db.prepare(`
-      SELECT s.id, s.title, COALESCE(s.agent,'unknown') as agent,
-        json_extract(s.model,'$.id') as model_id, s.tokens_input, s.tokens_output,
-        date(s.time_created/1000,'unixepoch') as day
-      FROM session s WHERE s.tokens_input > 0
-      ORDER BY s.tokens_input+s.tokens_output DESC LIMIT 15
-    `).all();
 
     db.close();
 
-    const activeByAgent = {};
+    const activeById = {};
+    let totalActive = 0;
     for (const r of sessionTimes) {
-      const k = `${r.agent}|||${r.model_id}`;
-      activeByAgent[k] = (activeByAgent[k] || 0) + (r.active_secs || 0);
+      activeById[r.id] = r.active_secs || 0;
+      totalActive += r.active_secs || 0;
     }
-    const totalActive = sessionTimes.reduce((s, r) => s + (r.active_secs || 0), 0);
-    const totalOpusCost = opusCost(totals?.total_input, totals?.total_output);
+
+    const totalIn  = totals?.total_input  || 0;
+    const totalOut = totals?.total_output || 0;
+    const totalOpusUsd = opusCost(totalIn, totalOut);
+    const totalOpusGbp = toGbp(totalOpusUsd);
+
+    const firstDay   = totals?.first_day ? new Date(totals.first_day) : new Date();
+    const lastDay    = totals?.last_day  ? new Date(totals.last_day)  : new Date();
+    const daysOfData = Math.max(1, Math.round((lastDay - firstDay) / 86400000) + 1);
+    const ollamaCost = (daysOfData / 30) * OLLAMA_GBP;
+
+    // Group sessions by project
+    const byProjMap = {};
+    for (const s of topSessionsRaw) {
+      if (!byProjMap[s.project_id]) byProjMap[s.project_id] = [];
+      byProjMap[s.project_id].push({
+        id:          s.id,
+        title:       s.title,
+        agent:       s.agent,
+        model_id:    s.model_id,
+        input_tokens:  s.tokens_input,
+        output_tokens: s.tokens_output,
+        day:         s.day,
+        active_secs: Math.round(activeById[s.id] || 0),
+        opus_cost_gbp: toGbp(opusCost(s.tokens_input, s.tokens_output)),
+      });
+    }
 
     const data = {
       byAgent: byAgent.map(a => ({
         ...a,
-        active_secs: Math.round(activeByAgent[`${a.agent}|||${a.model_id}`] || 0),
-        opus_cost:   opusCost(a.input_tokens, a.output_tokens),
-        model_cost:  modelCost(a.model_id, a.input_tokens, a.output_tokens),
+        opus_cost_gbp: toGbp(opusCost(a.input_tokens, a.output_tokens)),
       })),
       byModel: byModel.map(m => ({
         ...m,
-        opus_cost:  opusCost(m.input_tokens, m.output_tokens),
-        model_cost: modelCost(m.model_id, m.input_tokens, m.output_tokens),
+        opus_cost_gbp: toGbp(opusCost(m.input_tokens, m.output_tokens)),
       })),
-      byDay,
+      byDay: [...byDay].reverse(),
+      byProject: byProject.map(p => ({
+        ...p,
+        opus_cost_gbp:   toGbp(opusCost(p.input_tokens, p.output_tokens)),
+        sessions_detail: (byProjMap[p.project_id] || []).slice(0, 10),
+      })),
       totals: {
         ...totals,
-        total_active_secs: Math.round(totalActive),
-        total_opus_cost:   totalOpusCost,
-        total_savings:     totalOpusCost - (totals?.total_actual_cost || 0),
+        total_active_secs:     Math.round(totalActive),
+        total_opus_cost_gbp:   totalOpusGbp,
+        estimated_ollama_cost: ollamaCost,
+        savings_gbp:           totalOpusGbp - ollamaCost,
+        days_of_data:          daysOfData,
       },
-      topSessions: topSessions.map(s => ({
-        ...s,
-        opus_cost:  opusCost(s.tokens_input, s.tokens_output),
-        model_cost: modelCost(s.model_id, s.tokens_input, s.tokens_output),
+      comparisons: Object.entries(COMPARE).map(([name, rate]) => {
+        const costUsd = apiCost(rate, totalIn, totalOut);
+        return {
+          name,
+          color:       rate.color,
+          cost_gbp:    toGbp(costUsd),
+          savings_gbp: toGbp(costUsd) - ollamaCost,
+        };
+      }),
+      subscriptions: Object.entries(SUBSCRIPTIONS).map(([name, monthly]) => ({
+        name,
+        monthly_gbp: monthly,
+        your_monthly: OLLAMA_GBP,
+        you_save_monthly: monthly - OLLAMA_GBP,
       })),
+      ollama_monthly_gbp: OLLAMA_GBP,
     };
 
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
