@@ -292,8 +292,10 @@ async function cmdInstall() {
   };
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
-  console.log('\n  ✓ Done! Start OpenCode as normal — tonyai dashboard runs at http://localhost:6969');
-  console.log('\n  Run: opencode\n');
+  console.log('\n  ✓ Done!\n');
+  console.log('  Start the dashboard + OpenCode in two terminals:\n');
+  console.log('    tonyai start   # dashboard at http://localhost:6969');
+  console.log('    opencode       # in your project folder\n');
   console.log('  To undo everything: tonyai uninstall\n');
 }
 
