@@ -4,6 +4,8 @@ import { join, extname, relative, resolve } from "path"
 import { homedir } from "os"
 import { mkdirSync, existsSync } from "fs"
 
+const isWin = process.platform === 'win32'
+
 const OLLAMA_URL  = process.env.OLLAMA_URL         || "http://localhost:11434"
 const EMBED_MODEL = process.env.CLAUSE_EMBED_MODEL || "bge-m3"
 const DB_PATH     = join(homedir(), ".local", "share", "opencode", "clause-rag.db")
@@ -118,7 +120,7 @@ export async function handler(req: Request, _ctx: any): Promise<Response> {
     const dir = body.directory
     if (!dir) return Response.json({ error: "directory required" }, { status: 400 })
 
-    const absDir = resolve(dir.replace(/\//g, "\\"))
+    const absDir = resolve(isWin ? dir.replace(/\//g, "\\") : dir)
     if (!existsSync(absDir)) return Response.json({ error: `Directory not found: ${absDir}` }, { status: 400 })
 
     const encoder = new TextEncoder()

@@ -1,15 +1,8 @@
 'use strict';
 
-const PORTS = [4000, 4001, 4002, 4003, 4004, 4005];
+const { readBody } = require('../lib/util');
 
-function readBody(req) {
-  return new Promise(resolve => {
-    const chunks = [];
-    req.on('data', c => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString()));
-    req.on('error', () => resolve(''));
-  });
-}
+const PORTS = [4000, 4001, 4002, 4003, 4004, 4005];
 
 module.exports.handler = async function handler(req, res, url, ctx) {
   if (req.method === 'GET') {

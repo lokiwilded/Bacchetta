@@ -8,10 +8,10 @@
   "files": ["bin/", "server/", "public/"],
   "engines": { "node": ">=18" },
   "dependencies": {
-    "better-sqlite3": "^9.6.0"
+    "better-sqlite3": "^12.11.1"
   },
   "scripts": {
     "start": "node bin/clause.js",
-    "build-ui": "cd ui && bun run build && node -e \"require('fs').cpSync('ui/public/dashboard.html','public/dashboard.html',{force:true})\""
+    "build-ui": "cd ui && bun run build"
   }
 }

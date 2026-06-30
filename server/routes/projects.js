@@ -228,7 +228,7 @@ module.exports.handler = async function handler(req, res, _url, _ctx) {
       if (!match) {
         // Even if not the "current" project, show running if main is up and project is in DB
         const mainUp = running.find(r => PORT_CANDIDATES.includes(r.port));
-        return { ...p, running: false, runningPort: mainUp ? MAIN_PORT : null, version: mainUp?.version || null };
+        return { ...p, running: false, runningPort: mainUp ? _mainPort : null, version: mainUp?.version || null };
       }
       return { ...p, running: true, runningPort: match.port, version: match.version };
     });

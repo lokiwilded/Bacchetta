@@ -8,6 +8,30 @@ function opusCost(i: number, o: number) {
   return ((i || 0) / 1e6 * OPUS_IN) + ((o || 0) / 1e6 * OPUS_OUT)
 }
 
+const PRICING: Record<string, { in: number; out: number }> = {
+  'claude-opus-4':     { in: 15,   out: 75  },
+  'claude-opus-3-5':   { in: 15,   out: 75  },
+  'claude-sonnet-4':   { in: 3,    out: 15  },
+  'claude-sonnet-3-5': { in: 3,    out: 15  },
+  'claude-haiku-4':    { in: 0.8,  out: 4   },
+  'claude-haiku-3-5':  { in: 0.8,  out: 4   },
+  'gpt-4o':            { in: 2.5,  out: 10  },
+  'gpt-4o-mini':       { in: 0.15, out: 0.6 },
+  'gpt-4-turbo':       { in: 10,   out: 30  },
+  'o1':                { in: 15,   out: 60  },
+  'o1-mini':           { in: 3,    out: 12  },
+  'gemini-1.5-pro':    { in: 1.25, out: 5   },
+  'gemini-1.5-flash':  { in: 0.075, out: 0.3 },
+}
+
+function modelCost(modelId: string | null, i: number, o: number): number | null {
+  const id = (modelId || '').toLowerCase()
+  for (const [key, rate] of Object.entries(PRICING)) {
+    if (id.includes(key)) return ((i || 0) / 1e6 * rate.in) + ((o || 0) / 1e6 * rate.out)
+  }
+  return null
+}
+
 export async function handler(_req: Request, ctx: { dataDir: string }) {
   try {
     const db = new Database(join(ctx.dataDir, "opencode.db"), { readonly: true })
@@ -80,8 +104,9 @@ export async function handler(_req: Request, ctx: { dataDir: string }) {
         ...a,
         active_secs: Math.round(activeByAgent[`${a.agent}|||${a.model_id}`] || 0),
         opus_cost: opusCost(a.input_tokens, a.output_tokens),
+        model_cost: modelCost(a.model_id, a.input_tokens, a.output_tokens),
       })),
-      byModel: byModel.map(m => ({ ...m, opus_cost: opusCost(m.input_tokens, m.output_tokens) })),
+      byModel: byModel.map(m => ({ ...m, opus_cost: opusCost(m.input_tokens, m.output_tokens), model_cost: modelCost(m.model_id, m.input_tokens, m.output_tokens) })),
       byDay,
       totals: {
         ...totals,
@@ -89,7 +114,7 @@ export async function handler(_req: Request, ctx: { dataDir: string }) {
         total_opus_cost: totalOpusCost,
         total_savings: totalOpusCost - (totals?.total_actual_cost || 0),
       },
-      topSessions: topSessions.map(s => ({ ...s, opus_cost: opusCost(s.tokens_input, s.tokens_output) })),
+      topSessions: topSessions.map(s => ({ ...s, opus_cost: opusCost(s.tokens_input, s.tokens_output), model_cost: modelCost(s.model_id, s.tokens_input, s.tokens_output) })),
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 500 })

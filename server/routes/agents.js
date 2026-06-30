@@ -2,6 +2,7 @@
 
 const { readdir, readFile, writeFile } = require('node:fs/promises');
 const path = require('node:path');
+const { readBody } = require('../lib/util');
 
 function parseFrontmatter(content) {
   const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
@@ -45,15 +46,6 @@ function patchContent(content, model, systemPrompt, tools) {
   }
   if (systemPrompt !== undefined) body = systemPrompt + '\n';
   return fm + body;
-}
-
-function readBody(req) {
-  return new Promise(resolve => {
-    const chunks = [];
-    req.on('data', c => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString()));
-    req.on('error', () => resolve(''));
-  });
 }
 
 module.exports.parseFrontmatter = parseFrontmatter;

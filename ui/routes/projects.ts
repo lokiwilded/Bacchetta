@@ -4,6 +4,7 @@ import { homedir } from "os"
 import { spawn } from "bun"
 import { execSync } from "child_process"
 
+const isWin = process.platform === 'win32'
 const PROJECTS_PATH = join(homedir(), ".config", "opencode", "clause-projects.json")
 
 const PORT_CANDIDATES = [4001, 4002, 4003, 4004]
@@ -70,13 +71,22 @@ async function killPortProcess(port: number): Promise<void> {
     procs.delete(port)
   }
   try {
-    const out = execSync(`netstat -ano -p TCP`, { encoding: 'utf8', timeout: 3000 })
-    for (const line of out.split('\n')) {
-      if (line.includes(`:${port} `) && line.includes('LISTENING')) {
-        const pid = line.trim().split(/\s+/).pop()
-        if (pid && /^\d+$/.test(pid) && pid !== '0') {
-          try { execSync(`taskkill /F /T /PID ${pid}`, { encoding: 'utf8', timeout: 3000 }) } catch {}
+    if (isWin) {
+      const out = execSync(`netstat -ano -p TCP`, { encoding: 'utf8', timeout: 3000 })
+      for (const line of out.split('\n')) {
+        if (line.includes(`:${port} `) && line.includes('LISTENING')) {
+          const pid = line.trim().split(/\s+/).pop()
+          if (pid && /^\d+$/.test(pid) && pid !== '0') {
+            try { execSync(`taskkill /F /T /PID ${pid}`, { encoding: 'utf8', timeout: 3000 }) } catch {}
+          }
         }
+      }
+    } else {
+      try { execSync(`fuser -k ${port}/tcp`, { timeout: 3000 }) } catch {
+        try {
+          const pid = execSync(`lsof -ti:${port}`, { encoding: 'utf8', timeout: 3000 }).trim()
+          if (pid) execSync(`kill -9 ${pid}`, { timeout: 3000 })
+        } catch {}
       }
     }
   } catch {}
@@ -143,7 +153,7 @@ async function resolveMainPort(): Promise<number | null> {
 
 async function launchProject(directory: string): Promise<{ port: number; sessionId?: string; error?: string }> {
   const dir = norm(directory)
-  const cwd = directory.replace(/\//g, '\\')
+  const cwd = isWin ? directory.replace(/\//g, '\\') : directory
 
   await ensureGitRepo(cwd)
 
@@ -199,7 +209,7 @@ export async function handler(req: Request, _ctx: any) {
       })
       if (!match) {
         const mainUp = running.find((r: any) => PORT_CANDIDATES.includes(r.port))
-        return { ...p, running: false, runningPort: mainUp ? MAIN_PORT : null, version: mainUp?.version || null }
+        return { ...p, running: false, runningPort: mainUp ? _mainPort : null, version: mainUp?.version || null }
       }
       return { ...p, running: true, runningPort: match.port, version: match.version }
     })

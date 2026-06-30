@@ -171,7 +171,7 @@ function getLAN() {
 
 (function ensureMemoryKeeperAgent() {
   const agentPath = path.join(CONFIG_DIR, 'agents', 'memory-keeper.md');
-  const DEFAULT_MODEL = 'ollama-cloud/deepseek-v4-flash';
+  const DEFAULT_MODEL = '';
   if (fs.existsSync(agentPath)) {
     // Patch empty model to the fast default so the agent card shows a real selection
     try {
@@ -188,7 +188,7 @@ function getLAN() {
       '---',
       'description: Extracts and stores key project facts before context compression.',
       'mode: subagent',
-      `model: ${DEFAULT_MODEL}`,
+      'model: ',
       'permission:',
       '  edit: deny',
       '  write: deny',
