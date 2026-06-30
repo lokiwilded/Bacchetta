@@ -1,0 +1,38 @@
+services:
+  opencode:
+    image: node:22-slim
+    working_dir: /workspace
+    command: >
+      sh -c "npm install -g opencode-ai@latest &&
+             opencode serve --port 4000"
+    volumes:
+      - opencode-config:/root/.config/opencode
+      - opencode-data:/root/.local/share/opencode
+      - ${WORKSPACE:-./workspace}:/workspace
+    environment:
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+
+  clause-ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    volumes:
+      - opencode-config:/root/.config/opencode:ro
+      - opencode-data:/root/.local/share/opencode:ro
+    environment:
+      - OPENCODE_URL=http://opencode:4000
+      - OPENCODE_CONFIG_DIR=/root/.config/opencode
+      - OPENCODE_DATA_DIR=/root/.local/share/opencode
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - opencode
+    restart: unless-stopped
+
+volumes:
+  opencode-config:
+  opencode-data:

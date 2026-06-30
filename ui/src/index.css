@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    height: 100dvh;
+    background-color: #08090f;
+    color: #e2e8f0;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    -webkit-text-size-adjust: 100%;
+    overflow: hidden;
+  }
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #1e2235; border-radius: 2px; }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .pb-safe-offset { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+}

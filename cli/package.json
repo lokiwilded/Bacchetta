@@ -1,0 +1,11 @@
+{
+  "name": "clause",
+  "version": "0.1.0",
+  "description": "Start OpenCode + dashboard in one command",
+  "bin": {
+    "clause": "./index.ts"
+  },
+  "scripts": {
+    "start": "bun run index.ts"
+  }
+}

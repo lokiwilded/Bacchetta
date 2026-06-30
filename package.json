@@ -1,0 +1,17 @@
+{
+  "name": "clause",
+  "version": "0.1.0",
+  "description": "Dashboard + CLI for OpenCode — usage analytics, agent monitor, model config",
+  "keywords": ["opencode", "ai", "dashboard", "claude", "ollama", "llm", "developer-tools"],
+  "license": "MIT",
+  "bin": { "clause": "./bin/clause.js" },
+  "files": ["bin/", "server/", "public/"],
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "better-sqlite3": "^9.6.0"
+  },
+  "scripts": {
+    "start": "node bin/clause.js",
+    "build-ui": "cd ui && bun run build && node -e \"require('fs').cpSync('ui/public/dashboard.html','public/dashboard.html',{force:true})\""
+  }
+}
