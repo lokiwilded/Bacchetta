@@ -1,128 +1,330 @@
 #!/usr/bin/env node
 'use strict';
 
-const { spawn, execSync } = require('child_process');
-const { existsSync }      = require('fs');
-const { resolve, join }   = require('path');
-const os                  = require('os');
+const { execSync, spawn }                                        = require('child_process');
+const { existsSync, mkdirSync, readFileSync, writeFileSync,
+        readdirSync, copyFileSync }                              = require('fs');
+const { join }                                                   = require('path');
+const readline                                                   = require('readline');
+const os                                                         = require('os');
 
-const args        = process.argv.slice(2);
-const showHelp    = args.includes('--help') || args.includes('-h');
-const openBrowser = args.includes('--open');
-const dir         = args.find(a => !a.startsWith('--')) || '.';
+const args = process.argv.slice(2);
+const cmd  = args[0];
 
-const portArg  = args.find(a => a.startsWith('--port='));
-const oportArg = args.find(a => a.startsWith('--oport='));
-const UI_PORT  = portArg  ? parseInt(portArg.split('=')[1])  : parseInt(process.env.CLAUSE_UI_PORT  || '3001');
-const OC_PORT  = oportArg ? parseInt(oportArg.split('=')[1]) : parseInt(process.env.OPENCODE_PORT   || '4000');
+const HELP = `
+  clause — OpenCode multi-agent dashboard
 
-if (showHelp) {
-  console.log(`
-  clause — OpenCode dashboard
-
-  Usage: clause [directory] [options]
-
-  Options:
-    --port=<n>    Dashboard port (default: 3001)
-    --oport=<n>   OpenCode backend port (default: 4000)
-    --open        Open browser on start
-    --help        Show this help
+  Usage:
+    clause install    Set up your environment (run this first)
+    clause start      Start the clause dashboard server on :6969
+    clause --help     Show this help
 
   Examples:
-    clause                     start in current directory
-    clause ~/projects/myapp    start in a specific directory
-    clause --open              start and open browser
-    clause --port=3000         use port 3000 for the dashboard
-`);
+    clause install    # First-time setup wizard
+    clause start      # Start the dashboard, then run: opencode
+`;
+
+if (!cmd || cmd === '--help' || cmd === '-h') {
+  console.log(HELP);
   process.exit(0);
 }
 
-const workspace = resolve(dir);
-if (!existsSync(workspace)) {
-  console.error(`\n  ✗ Directory not found: ${workspace}\n`);
+if (cmd === 'start') {
+  cmdStart();
+} else if (cmd === 'install') {
+  cmdInstall().catch(err => {
+    console.error('\n  Error:', err.message);
+    process.exit(1);
+  });
+} else {
+  console.error(`  Unknown command: ${cmd}\n`);
+  console.log(HELP);
   process.exit(1);
 }
 
-function hasCommand(cmd) {
+// ─── clause start ────────────────────────────────────────────────────────────
+
+function cmdStart() {
+  const serverPath = join(__dirname, '..', 'server', 'index.js');
+  console.log('\n  clause dashboard → http://localhost:6969\n');
+  const child = spawn(process.execPath, [serverPath], { stdio: 'inherit' });
+  child.on('error', err => {
+    console.error('  server error:', err.message);
+    process.exit(1);
+  });
+  child.on('exit', code => process.exit(code || 0));
+  process.on('SIGINT',  () => { try { child.kill('SIGTERM'); } catch {} process.exit(0); });
+  process.on('SIGTERM', () => { try { child.kill('SIGTERM'); } catch {} process.exit(0); });
+}
+
+// ─── clause install ───────────────────────────────────────────────────────────
+
+async function cmdInstall() {
+  const configDir = join(os.homedir(), '.config', 'opencode');
+  const pluginDir = join(configDir, 'plugin');
+  const agentsDir = join(configDir, 'agents');
+  const pkgDir    = join(__dirname, '..');
+  const tmplDir   = join(pkgDir, 'templates');
+
+  console.log('\n  clause — OpenCode multi-agent dashboard\n');
+  console.log('  Checking prerequisites...');
+
+  // opencode
+  const hasOpencode = checkCmd('opencode');
+  console.log(`  ${hasOpencode ? '✓' : '✗'} opencode ${hasOpencode ? 'found' : 'not found  (install: npm install -g opencode-ai)'}`);
+
+  // Ollama + bge-m3
+  let ollamaOk = false;
+  let hasBgeM3 = false;
+  try {
+    const res = await fetchWithTimeout('http://127.0.0.1:11434/api/tags', 2000);
+    if (res.ok) {
+      ollamaOk = true;
+      const data = await res.json();
+      const models = (data.models || []).map(m => m.name || '');
+      hasBgeM3 = models.some(m => m.includes('bge-m3'));
+    }
+  } catch {}
+
+  console.log(`  ${ollamaOk ? '✓' : '✗'} Ollama running at localhost:11434`);
+  console.log(`  ${hasBgeM3 ? '✓' : '✗'} bge-m3 embedding model available${!hasBgeM3 && ollamaOk ? '  (run: ollama pull bge-m3)' : ''}`);
+  console.log('');
+
+  // ── Provider setup ──────────────────────────────────────────────────────────
+  console.log('  Provider setup:');
+  const providerChoice = await prompt(
+    '  ? How are you running AI models?\n' +
+    '    1) Ollama Cloud  (pay-per-second, cloud models at ollama.com)\n' +
+    '    2) Local Ollama  (free, your own GPU)\n' +
+    '  > '
+  );
+  const isCloud = providerChoice.trim() !== '2';
+
+  let apiKey       = '';
+  let primaryModel = '';
+  let fastModel    = '';
+
+  if (isCloud) {
+    apiKey = process.env.OLLAMA_API_KEY || '';
+    if (!apiKey) {
+      apiKey = (await prompt('  ? Ollama API key (from ollama.com/settings/keys): ')).trim();
+      if (apiKey) {
+        console.log(`  Add OLLAMA_API_KEY=${apiKey} to your shell profile to persist this.`);
+      }
+    }
+    primaryModel = 'ollama-cloud/glm-5.2';
+    fastModel    = 'ollama-cloud/deepseek-v4-flash';
+  } else {
+    primaryModel = (await prompt('  ? Primary model (e.g. qwen2.5-coder:32b, llama3.3:70b): ')).trim();
+    fastModel    = (await prompt('  ? Fast model for quick tasks (e.g. qwen2.5:7b): ')).trim();
+    if (!primaryModel) primaryModel = 'qwen2.5-coder:32b';
+    if (!fastModel)    fastModel    = primaryModel;
+  }
+
+  closeRL();
+  console.log('');
+
+  // ── npm install ─────────────────────────────────────────────────────────────
+  console.log('  Installing OpenCode plugins...');
+  const packages = [
+    'opencode-mem',
+    '@tarquinen/opencode-dcp',
+    '@ramtinj95/opencode-tokenscope',
+    'opencode-synced',
+    'opencode-queue',
+    '@ai-sdk/openai-compatible',
+  ];
+  for (const pkg of packages) console.log(`    ${pkg}`);
+
+  mkdirSync(configDir, { recursive: true });
+  try {
+    execSync(`npm install ${packages.join(' ')}`, { cwd: configDir, stdio: 'inherit' });
+    console.log('  done.\n');
+  } catch {
+    console.warn('  ⚠ npm install failed — you may need to run it manually:');
+    console.warn(`    cd "${configDir}" && npm install ${packages.join(' ')}\n`);
+  }
+
+  // ── Copy plugin files ───────────────────────────────────────────────────────
+  console.log('  Copying plugin files...');
+  mkdirSync(pluginDir, { recursive: true });
+  const pluginSrc = join(tmplDir, 'plugin');
+  for (const f of readdirSync(pluginSrc)) {
+    copyFileSync(join(pluginSrc, f), join(pluginDir, f));
+    console.log(`  ✓ ${f}`);
+  }
+  console.log('');
+
+  // ── Set up agents ───────────────────────────────────────────────────────────
+  console.log('  Setting up agents...');
+  mkdirSync(agentsDir, { recursive: true });
+  const agentSrc = join(tmplDir, 'agents');
+  for (const f of readdirSync(agentSrc)) {
+    const dest = join(agentsDir, f);
+    const name = f.replace('.md', '');
+    if (existsSync(dest)) {
+      console.log(`  - ${name}  (skipped — already exists)`);
+    } else {
+      let content = readFileSync(join(agentSrc, f), 'utf8');
+      if (!isCloud) {
+        // Replace all ollama-cloud/<model> references with the user's local model
+        content = content.replace(/ollama-cloud\/[^\s'"]+/g, `ollama/${primaryModel}`);
+      }
+      writeFileSync(dest, content, 'utf8');
+      console.log(`  ✓ ${name}`);
+    }
+  }
+  console.log('');
+
+  // ── Configure OpenCode ──────────────────────────────────────────────────────
+  console.log('  Configuring OpenCode...');
+
+  // Patch opencode.json — READ → MERGE → WRITE
+  const opencodePath = join(configDir, 'opencode.json');
+  let ocConfig = {};
+  if (existsSync(opencodePath)) {
+    try { ocConfig = JSON.parse(readFileSync(opencodePath, 'utf8')); } catch {}
+  }
+
+  if (isCloud) {
+    if (!ocConfig.provider) ocConfig.provider = {};
+    if (!ocConfig.provider['ollama-cloud']) {
+      const tmpl = JSON.parse(readFileSync(join(tmplDir, 'opencode.json'), 'utf8'));
+      ocConfig.provider['ollama-cloud'] = tmpl.provider['ollama-cloud'];
+    }
+    if (!ocConfig.model)       ocConfig.model       = 'ollama-cloud/glm-5.2';
+    if (!ocConfig.small_model) ocConfig.small_model = 'ollama-cloud/deepseek-v4-flash';
+  }
+
+  // Always merge plugin list — add missing, preserve order, no duplicates
+  const requiredPlugins = [
+    '@ramtinj95/opencode-tokenscope',
+    'opencode-synced',
+    'opencode-queue',
+    '@tarquinen/opencode-dcp',
+    'opencode-mem',
+    './plugin/clause-cache.ts',
+    './plugin/clause-rag.ts',
+    './plugin/clause-compact.ts',
+  ];
+  if (!Array.isArray(ocConfig.plugin)) ocConfig.plugin = [];
+  for (const p of requiredPlugins) {
+    if (!ocConfig.plugin.includes(p)) ocConfig.plugin.push(p);
+  }
+
+  if (!ocConfig.default_agent) ocConfig.default_agent = 'commander';
+
+  writeFileSync(opencodePath, JSON.stringify(ocConfig, null, 2) + '\n', 'utf8');
+  console.log('  ✓ opencode.json updated');
+
+  // Create opencode-mem.jsonc (skip if exists)
+  const memConfigPath = join(configDir, 'opencode-mem.jsonc');
+  if (existsSync(memConfigPath)) {
+    console.log('  - opencode-mem.jsonc  (skipped — already exists)');
+  } else {
+    const memConfig = buildMemConfig(isCloud, fastModel);
+    writeFileSync(memConfigPath, JSON.stringify(memConfig, null, 2) + '\n', 'utf8');
+    console.log('  ✓ opencode-mem.jsonc created');
+  }
+
+  // Create clause-settings.json (skip if exists)
+  const settingsPath = join(configDir, 'clause-settings.json');
+  if (existsSync(settingsPath)) {
+    console.log('  - clause-settings.json  (skipped — already exists)');
+  } else {
+    writeFileSync(settingsPath, readFileSync(join(tmplDir, 'clause-settings.json'), 'utf8'), 'utf8');
+    console.log('  ✓ clause-settings.json created');
+  }
+
+  console.log('\n  ✓ Done! Start OpenCode as normal — clause dashboard runs at http://localhost:6969');
+  console.log('\n  Run: opencode\n');
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function checkCmd(cmd) {
   try { execSync(`${cmd} --version`, { stdio: 'ignore', timeout: 5000 }); return true; }
   catch { return false; }
 }
 
-if (!hasCommand('opencode')) {
-  console.error(`
-  ✗  opencode is not installed.
-
-  Install it:
-    npm install -g opencode-ai
-
-  Or with the official installer:
-    curl -fsSL https://opencode.ai/install | sh
-
-  Then re-run: clause
-`);
-  process.exit(1);
+function fetchWithTimeout(url, ms) {
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
-const SERVER_ENTRY = join(__dirname, '..', 'server', 'index.js');
-const isWin = process.platform === 'win32';
-
-console.log(`\n  clause  →  ${workspace}\n`);
-
-const oc = spawn('opencode', ['serve', '--port', String(OC_PORT)], {
-  cwd: workspace,
-  stdio: 'inherit',
-  env: { ...process.env },
-  shell: isWin,
-});
-
-const ui = spawn(process.execPath, [SERVER_ENTRY], {
-  stdio: 'inherit',
-  env: {
-    ...process.env,
-    CLAUSE_UI_PORT: String(UI_PORT),
-    OPENCODE_URL: `http://localhost:${OC_PORT}`,
-  },
-});
-
-oc.on('error', e => console.error('  opencode:', e.message));
-ui.on('error', e => console.error('  server:',   e.message));
-
-setTimeout(() => {
-  const lan = getLAN();
-  console.log('  ┌──────────────────────────────────────────────────┐');
-  console.log('  │  clause                                          │');
-  console.log('  │                                                  │');
-  console.log(`  │  Dashboard  →  http://localhost:${UI_PORT}              │`);
-  console.log(`  │  Chat       →  http://localhost:${OC_PORT}              │`);
-  if (lan) {
-    console.log('  │                                                  │');
-    console.log(`  │  Phone      →  http://${lan}:${UI_PORT}         │`);
-  }
-  console.log('  └──────────────────────────────────────────────────┘');
-  console.log('');
-
-  if (openBrowser) {
-    const url = `http://localhost:${UI_PORT}`;
-    const open = isWin ? `start "" "${url}"` :
-                 process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
-    try { execSync(open, { shell: true }); } catch {}
-  }
-}, 2500);
-
-function cleanup() {
-  try { oc.kill('SIGTERM'); } catch {}
-  try { ui.kill('SIGTERM'); } catch {}
-  process.exit(0);
+// Single shared readline interface for the install wizard
+let _rl = null;
+function getRL() {
+  if (!_rl) _rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return _rl;
+}
+function closeRL() {
+  if (_rl) { _rl.close(); _rl = null; }
+}
+function prompt(question) {
+  return new Promise(resolve => getRL().question(question, answer => resolve(answer)));
 }
 
-process.on('SIGINT',  cleanup);
-process.on('SIGTERM', cleanup);
+function buildMemConfig(isCloud, fastModel) {
+  const localUrl = 'http://127.0.0.1:11434/v1';
+  const cloudUrl = 'https://ollama.com/v1';
 
-function getLAN() {
-  try {
-    for (const ifaces of Object.values(os.networkInterfaces()))
-      for (const iface of ifaces || [])
-        if (iface.family === 'IPv4' && !iface.internal) return iface.address;
-  } catch {}
-  return null;
+  return {
+    // Embeddings — always local Ollama (free)
+    embeddingApiUrl: localUrl,
+    embeddingApiKey: 'ollama',
+    embeddingModel: 'bge-m3',
+
+    // LLM for memory extraction
+    memoryProvider: 'openai-chat',
+    memoryApiUrl:   isCloud ? cloudUrl  : localUrl,
+    memoryApiKey:   isCloud ? 'env://OLLAMA_API_KEY' : 'ollama',
+    memoryModel:    isCloud ? 'deepseek-v4-flash' : fastModel,
+    memoryTemperature: 0.3,
+
+    // OpenCode provider registration
+    opencodeProvider: isCloud ? 'ollama-cloud' : 'ollama',
+    opencodeModel:    isCloud ? 'deepseek-v4-flash' : fastModel,
+
+    // Web UI (http://localhost:4747)
+    webServerEnabled: true,
+    webServerPort:    4747,
+    webServerHost:    '127.0.0.1',
+
+    // Auto-capture from conversations
+    autoCaptureEnabled:       true,
+    autoCaptureMaxIterations: 5,
+    autoCaptureMaxRetries:    3,
+
+    // Deduplication
+    deduplicationEnabled:              true,
+    deduplicationSimilarityThreshold:  0.90,
+
+    // Memory retention
+    autoCleanupEnabled:       true,
+    autoCleanupRetentionDays: 30,
+
+    // Inject top memories at start of each new session
+    chatMessage: {
+      enabled:              true,
+      maxMemories:          3,
+      injectOn:             'first',
+      excludeCurrentSession: true,
+    },
+
+    // User profile learning
+    injectProfile:                true,
+    userProfileAnalysisInterval:  10,
+    userProfileMaxPreferences:    20,
+    userProfileMaxPatterns:       15,
+
+    similarityThreshold: 0.6,
+    maxMemories:         10,
+    memory:              { defaultScope: 'project' },
+
+    showAutoCaptureToasts:  true,
+    showUserProfileToasts:  true,
+    showErrorToasts:        true,
+  };
 }

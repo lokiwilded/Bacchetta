@@ -1,11 +1,11 @@
 {
   "name": "clause",
   "version": "0.1.0",
-  "description": "Dashboard + CLI for OpenCode — usage analytics, agent monitor, model config",
+  "description": "Multi-agent AI coding dashboard for OpenCode — works with Ollama Cloud, local Ollama, or any OpenCode-supported provider",
   "keywords": ["opencode", "ai", "dashboard", "claude", "ollama", "llm", "developer-tools"],
   "license": "MIT",
   "bin": { "clause": "./bin/clause.js" },
-  "files": ["bin/", "server/", "public/"],
+  "files": ["bin/", "server/", "public/", "templates/"],
   "engines": { "node": ">=18" },
   "dependencies": {
     "better-sqlite3": "^12.11.1"

@@ -1,0 +1,65 @@
+{
+  // opencode-mem: persistent vector memory with auto-capture
+  // Web UI at http://localhost:4747 once OpenCode starts
+
+  // ── Embeddings — always local Ollama (free, runs on your GPU) ──────────────
+  // Pull the model first: ollama pull bge-m3
+  "embeddingApiUrl": "http://127.0.0.1:11434/v1",
+  "embeddingApiKey": "ollama",
+  "embeddingModel": "bge-m3",
+
+  // ── LLM for memory extraction ───────────────────────────────────────────────
+  // Cloud users: Ollama Cloud (deepseek-v4-flash is fast and cheap)
+  // Local users: set memoryApiUrl → http://127.0.0.1:11434/v1
+  //              set memoryApiKey → "ollama"
+  //              set memoryModel  → your fast local model
+  "memoryProvider": "openai-chat",
+  "memoryApiUrl": "https://ollama.com/v1",
+  "memoryApiKey": "env://OLLAMA_API_KEY",
+  "memoryModel": "deepseek-v4-flash",
+  "memoryTemperature": 0.3,
+
+  // ── OpenCode provider registration ──────────────────────────────────────────
+  "opencodeProvider": "ollama-cloud",
+  "opencodeModel": "deepseek-v4-flash",
+
+  // ── Web UI ──────────────────────────────────────────────────────────────────
+  "webServerEnabled": true,
+  "webServerPort": 4747,
+  "webServerHost": "127.0.0.1",
+
+  // ── Auto-capture from conversations ─────────────────────────────────────────
+  "autoCaptureEnabled": true,
+  "autoCaptureMaxIterations": 5,
+  "autoCaptureMaxRetries": 3,
+
+  // ── Deduplication ───────────────────────────────────────────────────────────
+  "deduplicationEnabled": true,
+  "deduplicationSimilarityThreshold": 0.90,
+
+  // ── Memory retention ─────────────────────────────────────────────────────────
+  "autoCleanupEnabled": true,
+  "autoCleanupRetentionDays": 30,
+
+  // ── Inject top memories at start of each new session ────────────────────────
+  "chatMessage": {
+    "enabled": true,
+    "maxMemories": 3,
+    "injectOn": "first",
+    "excludeCurrentSession": true
+  },
+
+  // ── User profile learning ────────────────────────────────────────────────────
+  "injectProfile": true,
+  "userProfileAnalysisInterval": 10,
+  "userProfileMaxPreferences": 20,
+  "userProfileMaxPatterns": 15,
+
+  "similarityThreshold": 0.6,
+  "maxMemories": 10,
+  "memory": { "defaultScope": "project" },
+
+  "showAutoCaptureToasts": true,
+  "showUserProfileToasts": true,
+  "showErrorToasts": true
+}

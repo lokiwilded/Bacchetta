@@ -1,7 +1,7 @@
 ---
 description: Writes test suites, test fixtures, and test infrastructure. Full write access to test files.
 mode: subagent
-model: ollama-cloud/devstral-2:123b-cloud
+model: ollama-cloud/devstral-small-2:24b
 permission:
   edit: allow
   bash:

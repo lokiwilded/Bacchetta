@@ -1,0 +1,13 @@
+{
+  "rag_max_file_kb": 100,
+  "rag_chunk_lines": 50,
+  "rag_top_k": 3,
+  "compact_after": 5,
+  "cache_read_cap_chars": 15000,
+  "cache_bash_cap_chars": 8000,
+  "memory_idle_minutes": 5,
+  "memory_top_k": 3,
+  "memory_model": "",
+  "profile_model": "",
+  "memory_embed_model": "bge-m3"
+}

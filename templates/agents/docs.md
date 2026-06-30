@@ -1,7 +1,7 @@
 ---
 description: Writes documentation — READMEs, docstrings, API docs, architecture docs. Full write access.
 mode: subagent
-model: ollama-cloud/gpt-oss:120b-cloud
+model: ollama-cloud/gpt-oss:20b
 permission:
   edit: allow
   bash:
