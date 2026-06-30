@@ -1,8 +1,8 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 'use strict';
 
 if (parseInt(process.versions.node) < 18) {
-  console.error('  clause requires Node.js 18 or later. Current: ' + process.version);
+  console.error('  tony requires Node.js 18 or later. Current: ' + process.version);
   process.exit(1);
 }
 
@@ -17,16 +17,16 @@ const args = process.argv.slice(2);
 const cmd  = args[0];
 
 const HELP = `
-  clause — OpenCode multi-agent dashboard
+  tony — OpenCode multi-agent dashboard
 
   Usage:
-    clause install    Set up your environment (run this first)
-    clause start      Start the clause dashboard server on :6969
-    clause --help     Show this help
+    tony install    Set up your environment (run this first)
+    tony start      Start the tony dashboard server on :6969
+    tony --help     Show this help
 
   Examples:
-    clause install    # First-time setup wizard
-    clause start      # Start the dashboard, then run: opencode
+    tony install    # First-time setup wizard
+    tony start      # Start the dashboard, then run: opencode
 `;
 
 if (!cmd || cmd === '--help' || cmd === '-h') {
@@ -47,11 +47,11 @@ if (cmd === 'start') {
   process.exit(1);
 }
 
-// ─── clause start ────────────────────────────────────────────────────────────
+// â”€â”€â”€ tony start â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function cmdStart() {
   const serverPath = join(__dirname, '..', 'server', 'index.js');
-  console.log('\n  clause dashboard → http://localhost:6969\n');
+  console.log('\n  tony dashboard â†’ http://localhost:6969\n');
   const child = spawn(process.execPath, [serverPath], { stdio: 'inherit' });
   child.on('error', err => {
     console.error('  server error:', err.message);
@@ -62,7 +62,7 @@ function cmdStart() {
   process.on('SIGTERM', () => { try { child.kill('SIGTERM'); } catch {} process.exit(0); });
 }
 
-// ─── clause install ───────────────────────────────────────────────────────────
+// â”€â”€â”€ tony install â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdInstall() {
   const configDir = join(os.homedir(), '.config', 'opencode');
@@ -71,18 +71,18 @@ async function cmdInstall() {
   const pkgDir    = join(__dirname, '..');
   const tmplDir   = join(pkgDir, 'templates');
 
-  console.log('\n  clause — OpenCode multi-agent dashboard\n');
+  console.log('\n  tony — OpenCode multi-agent dashboard\n');
   console.log('  Checking prerequisites...');
 
   // opencode
   const hasOpencode = checkCmd('opencode');
-  console.log(`  ${hasOpencode ? '✓' : '✗'} opencode ${hasOpencode ? 'found' : 'not found  (install: npm install -g opencode-ai)'}`);
+  console.log(`  ${hasOpencode ? 'âœ“' : 'âœ—'} opencode ${hasOpencode ? 'found' : 'not found  (install: npm install -g opencode-ai)'}`);
 
   if (hasOpencode) {
     let hasServe = false;
     try { execSync('opencode serve --help', { stdio: 'ignore', timeout: 5000 }); hasServe = true; } catch {}
     if (!hasServe) {
-      console.log('  ⚠ opencode found but `opencode serve` is not available.');
+      console.log('  âš  opencode found but `opencode serve` is not available.');
       console.log('    Make sure you have opencode-ai >= 0.3.0: npm install -g opencode-ai\n');
     }
   }
@@ -100,11 +100,11 @@ async function cmdInstall() {
     }
   } catch {}
 
-  console.log(`  ${ollamaOk ? '✓' : '✗'} Ollama running at localhost:11434`);
-  console.log(`  ${hasBgeM3 ? '✓' : '✗'} bge-m3 embedding model available${!hasBgeM3 && ollamaOk ? '  (run: ollama pull bge-m3)' : ''}`);
+  console.log(`  ${ollamaOk ? 'âœ“' : 'âœ—'} Ollama running at localhost:11434`);
+  console.log(`  ${hasBgeM3 ? 'âœ“' : 'âœ—'} bge-m3 embedding model available${!hasBgeM3 && ollamaOk ? '  (run: ollama pull bge-m3)' : ''}`);
   console.log('');
 
-  // ── Provider setup ──────────────────────────────────────────────────────────
+  // â”€â”€ Provider setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   console.log('  Provider setup:');
   const providerChoice = await prompt(
     '  ? How are you running AI models?\n' +
@@ -138,7 +138,7 @@ async function cmdInstall() {
   closeRL();
   console.log('');
 
-  // ── npm install ─────────────────────────────────────────────────────────────
+  // â”€â”€ npm install â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   console.log('  Installing OpenCode plugins...');
   const packages = [
     'opencode-mem',
@@ -155,21 +155,21 @@ async function cmdInstall() {
     execSync(`npm install ${packages.join(' ')}`, { cwd: configDir, stdio: 'inherit' });
     console.log('  done.\n');
   } catch {
-    console.warn('  ⚠ npm install failed — you may need to run it manually:');
+    console.warn('  âš  npm install failed â€” you may need to run it manually:');
     console.warn(`    cd "${configDir}" && npm install ${packages.join(' ')}\n`);
   }
 
-  // ── Copy plugin files ───────────────────────────────────────────────────────
+  // â”€â”€ Copy plugin files â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   console.log('  Copying plugin files...');
   mkdirSync(pluginDir, { recursive: true });
   const pluginSrc = join(tmplDir, 'plugin');
   for (const f of readdirSync(pluginSrc)) {
     copyFileSync(join(pluginSrc, f), join(pluginDir, f));
-    console.log(`  ✓ ${f}`);
+    console.log(`  âœ“ ${f}`);
   }
   console.log('');
 
-  // ── Set up agents ───────────────────────────────────────────────────────────
+  // â”€â”€ Set up agents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   console.log('  Setting up agents...');
   mkdirSync(agentsDir, { recursive: true });
   const agentSrc = join(tmplDir, 'agents');
@@ -177,7 +177,7 @@ async function cmdInstall() {
     const dest = join(agentsDir, f);
     const name = f.replace('.md', '');
     if (existsSync(dest)) {
-      console.log(`  - ${name}  (skipped — already exists)`);
+      console.log(`  - ${name}  (skipped â€” already exists)`);
     } else {
       let content = readFileSync(join(agentSrc, f), 'utf8');
       if (!isCloud) {
@@ -185,15 +185,15 @@ async function cmdInstall() {
         content = content.replace(/ollama-cloud\/[^\s'"]+/g, `ollama/${primaryModel}`);
       }
       writeFileSync(dest, content, 'utf8');
-      console.log(`  ✓ ${name}`);
+      console.log(`  âœ“ ${name}`);
     }
   }
   console.log('');
 
-  // ── Configure OpenCode ──────────────────────────────────────────────────────
+  // â”€â”€ Configure OpenCode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   console.log('  Configuring OpenCode...');
 
-  // Patch opencode.json — READ → MERGE → WRITE
+  // Patch opencode.json â€” READ â†’ MERGE â†’ WRITE
   const opencodePath = join(configDir, 'opencode.json');
   let ocConfig = {};
   if (existsSync(opencodePath)) {
@@ -209,21 +209,21 @@ async function cmdInstall() {
     if (!ocConfig.model)       ocConfig.model       = 'ollama-cloud/glm-5.2';
     if (!ocConfig.small_model) ocConfig.small_model = 'ollama-cloud/deepseek-v4-flash';
   } else {
-    // Local Ollama — write the user's chosen model to opencode.json
+    // Local Ollama â€” write the user's chosen model to opencode.json
     if (!ocConfig.model)       ocConfig.model       = `ollama/${primaryModel}`;
     if (!ocConfig.small_model) ocConfig.small_model = `ollama/${fastModel}`;
   }
 
-  // Always merge plugin list — add missing, preserve order, no duplicates
+  // Always merge plugin list â€” add missing, preserve order, no duplicates
   const requiredPlugins = [
     '@ramtinj95/opencode-tokenscope',
     'opencode-synced',
     'opencode-queue',
     '@tarquinen/opencode-dcp',
     'opencode-mem',
-    './plugin/clause-cache.ts',
-    './plugin/clause-rag.ts',
-    './plugin/clause-compact.ts',
+    './plugin/tony-cache.ts',
+    './plugin/tony-rag.ts',
+    './plugin/tony-compact.ts',
   ];
   if (!Array.isArray(ocConfig.plugin)) ocConfig.plugin = [];
   for (const p of requiredPlugins) {
@@ -233,32 +233,32 @@ async function cmdInstall() {
   if (!ocConfig.default_agent) ocConfig.default_agent = 'commander';
 
   writeFileSync(opencodePath, JSON.stringify(ocConfig, null, 2) + '\n', 'utf8');
-  console.log('  ✓ opencode.json updated');
+  console.log('  âœ“ opencode.json updated');
 
   // Create opencode-mem.jsonc (skip if exists)
   const memConfigPath = join(configDir, 'opencode-mem.jsonc');
   if (existsSync(memConfigPath)) {
-    console.log('  - opencode-mem.jsonc  (skipped — already exists)');
+    console.log('  - opencode-mem.jsonc  (skipped â€” already exists)');
   } else {
     const memConfig = buildMemConfig(isCloud, fastModel);
     writeFileSync(memConfigPath, JSON.stringify(memConfig, null, 2) + '\n', 'utf8');
-    console.log('  ✓ opencode-mem.jsonc created');
+    console.log('  âœ“ opencode-mem.jsonc created');
   }
 
-  // Create clause-settings.json (skip if exists)
-  const settingsPath = join(configDir, 'clause-settings.json');
+  // Create tony-settings.json (skip if exists)
+  const settingsPath = join(configDir, 'tony-settings.json');
   if (existsSync(settingsPath)) {
-    console.log('  - clause-settings.json  (skipped — already exists)');
+    console.log('  - tony-settings.json  (skipped â€” already exists)');
   } else {
-    writeFileSync(settingsPath, readFileSync(join(tmplDir, 'clause-settings.json'), 'utf8'), 'utf8');
-    console.log('  ✓ clause-settings.json created');
+    writeFileSync(settingsPath, readFileSync(join(tmplDir, 'tony-settings.json'), 'utf8'), 'utf8');
+    console.log('  âœ“ tony-settings.json created');
   }
 
-  console.log('\n  ✓ Done! Start OpenCode as normal — clause dashboard runs at http://localhost:6969');
+  console.log('\n  âœ“ Done! Start OpenCode as normal â€” tony dashboard runs at http://localhost:6969');
   console.log('\n  Run: opencode\n');
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function checkCmd(cmd) {
   try { execSync(`${cmd} --version`, { stdio: 'ignore', timeout: 5000 }); return true; }
@@ -289,7 +289,7 @@ function buildMemConfig(isCloud, fastModel) {
   const cloudUrl = 'https://ollama.com/v1';
 
   return {
-    // Embeddings — always local Ollama (free)
+    // Embeddings â€” always local Ollama (free)
     embeddingApiUrl: localUrl,
     embeddingApiKey: 'ollama',
     embeddingModel: 'bge-m3',

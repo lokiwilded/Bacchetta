@@ -1,4 +1,4 @@
-# clause
+# tony
 
 Multi-agent AI coding dashboard for [OpenCode](https://opencode.ai). Adds a project launcher, agent manager, usage monitor, and persistent memory to your OpenCode setup.
 
@@ -22,8 +22,8 @@ Works with **Ollama Cloud** (pay-per-second), **local Ollama** (free, your GPU),
 ## Install
 
 ```bash
-npm install -g clause-ai
-clause install
+npm install -g tony
+tony install
 ```
 
 The wizard will:
@@ -35,12 +35,12 @@ The wizard will:
 ## Usage
 
 ```bash
-opencode          # start OpenCode — clause dashboard runs at http://localhost:6969
+opencode          # start OpenCode — tony dashboard runs at http://localhost:6969
 ```
 
 Or start the dashboard separately:
 ```bash
-clause start      # dashboard only, at http://localhost:6969
+tony start        # dashboard only, at http://localhost:6969
 opencode          # run OpenCode as normal
 ```
 
@@ -61,11 +61,11 @@ opencode          # run OpenCode as normal
 **Local Ollama** (free):
 - Runs entirely on your machine, no API key needed
 - Works with any model you have pulled: `ollama pull qwen2.5-coder:32b`
-- During `clause install`, enter your model name when prompted
+- During `tony install`, enter your model name when prompted
 
 **Other providers** (Anthropic, OpenAI, etc.):
 - OpenCode supports these natively — configure them in `~/.config/opencode/opencode.json`
-- Run `clause install` and choose local Ollama, then manually update agent model fields
+- Run `tony install` and choose local Ollama, then manually update agent model fields
 
 ## Memory
 
