@@ -132,7 +132,7 @@ function getLAN() {
       'Architectural or implementation decisions reached in this session.',
       '',
       '## Known Issues',
-      'Bugs or problems identified but not yet resolved.',',
+      'Bugs or problems identified but not yet resolved.',
       '',
       '## Patterns & Preferences',
       'How the user likes things done — code style, tool preferences, workflow habits.',
