@@ -22,8 +22,8 @@ Works with **Ollama Cloud** (pay-per-second), **local Ollama** (free, your GPU),
 ## Install
 
 ```bash
-npm install -g tony
-tony install
+npm install -g tonyai
+tonyai install
 ```
 
 The wizard will:
@@ -35,12 +35,12 @@ The wizard will:
 ## Usage
 
 ```bash
-opencode          # start OpenCode — tony dashboard runs at http://localhost:6969
+opencode          # start OpenCode — tonyai dashboard runs at http://localhost:6969
 ```
 
 Or start the dashboard separately:
 ```bash
-tony start        # dashboard only, at http://localhost:6969
+tonyai start        # dashboard only, at http://localhost:6969
 opencode          # run OpenCode as normal
 ```
 
@@ -61,11 +61,11 @@ opencode          # run OpenCode as normal
 **Local Ollama** (free):
 - Runs entirely on your machine, no API key needed
 - Works with any model you have pulled: `ollama pull qwen2.5-coder:32b`
-- During `tony install`, enter your model name when prompted
+- During `tonyai install`, enter your model name when prompted
 
 **Other providers** (Anthropic, OpenAI, etc.):
 - OpenCode supports these natively — configure them in `~/.config/opencode/opencode.json`
-- Run `tony install` and choose local Ollama, then manually update agent model fields
+- Run `tonyai install` and choose local Ollama, then manually update agent model fields
 
 ## Memory
 

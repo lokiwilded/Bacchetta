@@ -2,7 +2,7 @@
 'use strict';
 
 if (parseInt(process.versions.node) < 18) {
-  console.error('  tony requires Node.js 18 or later. Current: ' + process.version);
+  console.error('  tonyai requires Node.js 18 or later. Current: ' + process.version);
   process.exit(1);
 }
 
@@ -17,16 +17,16 @@ const args = process.argv.slice(2);
 const cmd  = args[0];
 
 const HELP = `
-  tony — OpenCode multi-agent dashboard
+  tonyai — OpenCode multi-agent dashboard
 
   Usage:
-    tony install    Set up your environment (run this first)
-    tony start      Start the tony dashboard server on :6969
-    tony --help     Show this help
+    tonyai install    Set up your environment (run this first)
+    tonyai start      Start the tonyai dashboard server on :6969
+    tonyai --help     Show this help
 
   Examples:
-    tony install    # First-time setup wizard
-    tony start      # Start the dashboard, then run: opencode
+    tonyai install    # First-time setup wizard
+    tonyai start      # Start the dashboard, then run: opencode
 `;
 
 if (!cmd || cmd === '--help' || cmd === '-h') {
@@ -47,11 +47,11 @@ if (cmd === 'start') {
   process.exit(1);
 }
 
-// â”€â”€â”€ tony start â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ tonyai start â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function cmdStart() {
   const serverPath = join(__dirname, '..', 'server', 'index.js');
-  console.log('\n  tony dashboard â†’ http://localhost:6969\n');
+  console.log('\n  tonyai dashboard â†’ http://localhost:6969\n');
   const child = spawn(process.execPath, [serverPath], { stdio: 'inherit' });
   child.on('error', err => {
     console.error('  server error:', err.message);
@@ -62,7 +62,7 @@ function cmdStart() {
   process.on('SIGTERM', () => { try { child.kill('SIGTERM'); } catch {} process.exit(0); });
 }
 
-// â”€â”€â”€ tony install â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ tonyai install â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdInstall() {
   const configDir = join(os.homedir(), '.config', 'opencode');
@@ -71,7 +71,7 @@ async function cmdInstall() {
   const pkgDir    = join(__dirname, '..');
   const tmplDir   = join(pkgDir, 'templates');
 
-  console.log('\n  tony — OpenCode multi-agent dashboard\n');
+  console.log('\n  tonyai — OpenCode multi-agent dashboard\n');
   console.log('  Checking prerequisites...');
 
   // opencode
@@ -221,9 +221,9 @@ async function cmdInstall() {
     'opencode-queue',
     '@tarquinen/opencode-dcp',
     'opencode-mem',
-    './plugin/tony-cache.ts',
-    './plugin/tony-rag.ts',
-    './plugin/tony-compact.ts',
+    './plugin/tonyai-cache.ts',
+    './plugin/tonyai-rag.ts',
+    './plugin/tonyai-compact.ts',
   ];
   if (!Array.isArray(ocConfig.plugin)) ocConfig.plugin = [];
   for (const p of requiredPlugins) {
@@ -245,16 +245,16 @@ async function cmdInstall() {
     console.log('  âœ“ opencode-mem.jsonc created');
   }
 
-  // Create tony-settings.json (skip if exists)
-  const settingsPath = join(configDir, 'tony-settings.json');
+  // Create tonyai-settings.json (skip if exists)
+  const settingsPath = join(configDir, 'tonyai-settings.json');
   if (existsSync(settingsPath)) {
-    console.log('  - tony-settings.json  (skipped â€” already exists)');
+    console.log('  - tonyai-settings.json  (skipped â€” already exists)');
   } else {
-    writeFileSync(settingsPath, readFileSync(join(tmplDir, 'tony-settings.json'), 'utf8'), 'utf8');
-    console.log('  âœ“ tony-settings.json created');
+    writeFileSync(settingsPath, readFileSync(join(tmplDir, 'tonyai-settings.json'), 'utf8'), 'utf8');
+    console.log('  âœ“ tonyai-settings.json created');
   }
 
-  console.log('\n  âœ“ Done! Start OpenCode as normal â€” tony dashboard runs at http://localhost:6969');
+  console.log('\n  âœ“ Done! Start OpenCode as normal â€” tonyai dashboard runs at http://localhost:6969');
   console.log('\n  Run: opencode\n');
 }
 
