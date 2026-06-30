@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 'use strict';
 
 if (parseInt(process.versions.node) < 18) {
@@ -8,7 +8,7 @@ if (parseInt(process.versions.node) < 18) {
 
 const { execSync, spawn }                                        = require('child_process');
 const { existsSync, mkdirSync, readFileSync, writeFileSync,
-        readdirSync, copyFileSync }                              = require('fs');
+        readdirSync, copyFileSync, unlinkSync }                  = require('fs');
 const { join }                                                   = require('path');
 const readline                                                   = require('readline');
 const os                                                         = require('os');
@@ -20,13 +20,15 @@ const HELP = `
   tonyai — OpenCode multi-agent dashboard
 
   Usage:
-    tonyai install    Set up your environment (run this first)
-    tonyai start      Start the tonyai dashboard server on :6969
-    tonyai --help     Show this help
+    tonyai install      Set up your environment (run this first)
+    tonyai uninstall    Remove tonyai and restore your previous OpenCode config
+    tonyai start        Start the tonyai dashboard server on :6969
+    tonyai --help       Show this help
 
   Examples:
-    tonyai install    # First-time setup wizard
-    tonyai start      # Start the dashboard, then run: opencode
+    tonyai install      # First-time setup wizard
+    tonyai start        # Start the dashboard, then run: opencode
+    tonyai uninstall    # Full cleanup, restores original opencode.json
 `;
 
 if (!cmd || cmd === '--help' || cmd === '-h') {
@@ -41,17 +43,22 @@ if (cmd === 'start') {
     console.error('\n  Error:', err.message);
     process.exit(1);
   });
+} else if (cmd === 'uninstall') {
+  cmdUninstall().catch(err => {
+    console.error('\n  Error:', err.message);
+    process.exit(1);
+  });
 } else {
   console.error(`  Unknown command: ${cmd}\n`);
   console.log(HELP);
   process.exit(1);
 }
 
-// â”€â”€â”€ tonyai start â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- tonyai start -----------------------------------------------------------
 
 function cmdStart() {
   const serverPath = join(__dirname, '..', 'server', 'index.js');
-  console.log('\n  tonyai dashboard â†’ http://localhost:6969\n');
+  console.log('\n  tonyai dashboard → http://localhost:6969\n');
   const child = spawn(process.execPath, [serverPath], { stdio: 'inherit' });
   child.on('error', err => {
     console.error('  server error:', err.message);
@@ -62,27 +69,28 @@ function cmdStart() {
   process.on('SIGTERM', () => { try { child.kill('SIGTERM'); } catch {} process.exit(0); });
 }
 
-// â”€â”€â”€ tonyai install â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- tonyai install ---------------------------------------------------------
 
 async function cmdInstall() {
-  const configDir = join(os.homedir(), '.config', 'opencode');
-  const pluginDir = join(configDir, 'plugin');
-  const agentsDir = join(configDir, 'agents');
-  const pkgDir    = join(__dirname, '..');
-  const tmplDir   = join(pkgDir, 'templates');
+  const configDir  = join(os.homedir(), '.config', 'opencode');
+  const pluginDir  = join(configDir, 'plugin');
+  const agentsDir  = join(configDir, 'agents');
+  const pkgDir     = join(__dirname, '..');
+  const tmplDir    = join(pkgDir, 'templates');
+  const manifestPath = join(configDir, 'tonyai-manifest.json');
 
   console.log('\n  tonyai — OpenCode multi-agent dashboard\n');
   console.log('  Checking prerequisites...');
 
   // opencode
   const hasOpencode = checkCmd('opencode');
-  console.log(`  ${hasOpencode ? 'âœ“' : 'âœ—'} opencode ${hasOpencode ? 'found' : 'not found  (install: npm install -g opencode-ai)'}`);
+  console.log(`  ${hasOpencode ? '✓' : '✗'} opencode ${hasOpencode ? 'found' : 'not found  (install: npm install -g opencode-ai)'}`);
 
   if (hasOpencode) {
     let hasServe = false;
     try { execSync('opencode serve --help', { stdio: 'ignore', timeout: 5000 }); hasServe = true; } catch {}
     if (!hasServe) {
-      console.log('  âš  opencode found but `opencode serve` is not available.');
+      console.log('  ⚠  opencode found but `opencode serve` is not available.');
       console.log('    Make sure you have opencode-ai >= 0.3.0: npm install -g opencode-ai\n');
     }
   }
@@ -100,11 +108,11 @@ async function cmdInstall() {
     }
   } catch {}
 
-  console.log(`  ${ollamaOk ? 'âœ“' : 'âœ—'} Ollama running at localhost:11434`);
-  console.log(`  ${hasBgeM3 ? 'âœ“' : 'âœ—'} bge-m3 embedding model available${!hasBgeM3 && ollamaOk ? '  (run: ollama pull bge-m3)' : ''}`);
+  console.log(`  ${ollamaOk ? '✓' : '✗'} Ollama running at localhost:11434`);
+  console.log(`  ${hasBgeM3 ? '✓' : '✗'} bge-m3 embedding model available${!hasBgeM3 && ollamaOk ? '  (run: ollama pull bge-m3)' : ''}`);
   console.log('');
 
-  // â”€â”€ Provider setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Provider setup --------------------------------------------------------
   console.log('  Provider setup:');
   const providerChoice = await prompt(
     '  ? How are you running AI models?\n' +
@@ -138,7 +146,20 @@ async function cmdInstall() {
   closeRL();
   console.log('');
 
-  // â”€â”€ npm install â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  mkdirSync(configDir, { recursive: true });
+
+  // -- Backup opencode.json before touching it -------------------------------
+  const opencodePath  = join(configDir, 'opencode.json');
+  const opencodeBackup = join(configDir, 'opencode.json.tonyai.bak');
+  const backedUp = [];
+
+  if (existsSync(opencodePath) && !existsSync(opencodeBackup)) {
+    copyFileSync(opencodePath, opencodeBackup);
+    backedUp.push('opencode.json');
+    console.log('  ✓ opencode.json backed up → opencode.json.tonyai.bak');
+  }
+
+  // -- npm install -----------------------------------------------------------
   console.log('  Installing OpenCode plugins...');
   const packages = [
     'opencode-mem',
@@ -150,51 +171,53 @@ async function cmdInstall() {
   ];
   for (const pkg of packages) console.log(`    ${pkg}`);
 
-  mkdirSync(configDir, { recursive: true });
   try {
     execSync(`npm install ${packages.join(' ')}`, { cwd: configDir, stdio: 'inherit' });
     console.log('  done.\n');
   } catch {
-    console.warn('  âš  npm install failed â€” you may need to run it manually:');
+    console.warn('  ⚠  npm install failed — you may need to run it manually:');
     console.warn(`    cd "${configDir}" && npm install ${packages.join(' ')}\n`);
   }
 
-  // â”€â”€ Copy plugin files â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Copy plugin files -----------------------------------------------------
   console.log('  Copying plugin files...');
   mkdirSync(pluginDir, { recursive: true });
   const pluginSrc = join(tmplDir, 'plugin');
+  const createdFiles = [];
+
   for (const f of readdirSync(pluginSrc)) {
-    copyFileSync(join(pluginSrc, f), join(pluginDir, f));
-    console.log(`  âœ“ ${f}`);
+    const dest = join(pluginDir, f);
+    copyFileSync(join(pluginSrc, f), dest);
+    createdFiles.push(`plugin/${f}`);
+    console.log(`  ✓ ${f}`);
   }
   console.log('');
 
-  // â”€â”€ Set up agents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Set up agents ---------------------------------------------------------
   console.log('  Setting up agents...');
   mkdirSync(agentsDir, { recursive: true });
   const agentSrc = join(tmplDir, 'agents');
+
   for (const f of readdirSync(agentSrc)) {
     const dest = join(agentsDir, f);
     const name = f.replace('.md', '');
     if (existsSync(dest)) {
-      console.log(`  - ${name}  (skipped â€” already exists)`);
+      console.log(`  - ${name}  (skipped — already exists)`);
     } else {
       let content = readFileSync(join(agentSrc, f), 'utf8');
       if (!isCloud) {
-        // Replace all ollama-cloud/<model> references with the user's local model
         content = content.replace(/ollama-cloud\/[^\s'"]+/g, `ollama/${primaryModel}`);
       }
       writeFileSync(dest, content, 'utf8');
-      console.log(`  âœ“ ${name}`);
+      createdFiles.push(`agents/${f}`);
+      console.log(`  ✓ ${name}`);
     }
   }
   console.log('');
 
-  // â”€â”€ Configure OpenCode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Configure OpenCode ----------------------------------------------------
   console.log('  Configuring OpenCode...');
 
-  // Patch opencode.json â€” READ â†’ MERGE â†’ WRITE
-  const opencodePath = join(configDir, 'opencode.json');
   let ocConfig = {};
   if (existsSync(opencodePath)) {
     try { ocConfig = JSON.parse(readFileSync(opencodePath, 'utf8')); } catch {}
@@ -209,56 +232,145 @@ async function cmdInstall() {
     if (!ocConfig.model)       ocConfig.model       = 'ollama-cloud/glm-5.2';
     if (!ocConfig.small_model) ocConfig.small_model = 'ollama-cloud/deepseek-v4-flash';
   } else {
-    // Local Ollama â€” write the user's chosen model to opencode.json
     if (!ocConfig.model)       ocConfig.model       = `ollama/${primaryModel}`;
     if (!ocConfig.small_model) ocConfig.small_model = `ollama/${fastModel}`;
   }
 
-  // Always merge plugin list â€” add missing, preserve order, no duplicates
   const requiredPlugins = [
     '@ramtinj95/opencode-tokenscope',
     'opencode-synced',
     'opencode-queue',
     '@tarquinen/opencode-dcp',
     'opencode-mem',
-    './plugin/tonyai-cache.ts',
-    './plugin/tonyai-rag.ts',
-    './plugin/tonyai-compact.ts',
+    './plugin/clause-cache.ts',
+    './plugin/clause-rag.ts',
+    './plugin/clause-compact.ts',
   ];
   if (!Array.isArray(ocConfig.plugin)) ocConfig.plugin = [];
+  const addedPlugins = [];
   for (const p of requiredPlugins) {
-    if (!ocConfig.plugin.includes(p)) ocConfig.plugin.push(p);
+    if (!ocConfig.plugin.includes(p)) {
+      ocConfig.plugin.push(p);
+      addedPlugins.push(p);
+    }
   }
 
   if (!ocConfig.default_agent) ocConfig.default_agent = 'commander';
 
   writeFileSync(opencodePath, JSON.stringify(ocConfig, null, 2) + '\n', 'utf8');
-  console.log('  âœ“ opencode.json updated');
+  console.log('  ✓ opencode.json updated');
 
-  // Create opencode-mem.jsonc (skip if exists)
+  // opencode-mem.jsonc
   const memConfigPath = join(configDir, 'opencode-mem.jsonc');
   if (existsSync(memConfigPath)) {
-    console.log('  - opencode-mem.jsonc  (skipped â€” already exists)');
+    console.log('  - opencode-mem.jsonc  (skipped — already exists)');
   } else {
     const memConfig = buildMemConfig(isCloud, fastModel);
     writeFileSync(memConfigPath, JSON.stringify(memConfig, null, 2) + '\n', 'utf8');
-    console.log('  âœ“ opencode-mem.jsonc created');
+    createdFiles.push('opencode-mem.jsonc');
+    console.log('  ✓ opencode-mem.jsonc created');
   }
 
-  // Create tonyai-settings.json (skip if exists)
-  const settingsPath = join(configDir, 'tonyai-settings.json');
+  // clause-settings.json (used internally by the tonyai server)
+  const settingsPath = join(configDir, 'clause-settings.json');
   if (existsSync(settingsPath)) {
-    console.log('  - tonyai-settings.json  (skipped â€” already exists)');
+    console.log('  - clause-settings.json  (skipped — already exists)');
   } else {
-    writeFileSync(settingsPath, readFileSync(join(tmplDir, 'tonyai-settings.json'), 'utf8'), 'utf8');
-    console.log('  âœ“ tonyai-settings.json created');
+    copyFileSync(join(tmplDir, 'clause-settings.json'), settingsPath);
+    createdFiles.push('clause-settings.json');
+    console.log('  ✓ clause-settings.json created');
   }
 
-  console.log('\n  âœ“ Done! Start OpenCode as normal â€” tonyai dashboard runs at http://localhost:6969');
+  // -- Write manifest --------------------------------------------------------
+  const manifest = {
+    version:      require(join(__dirname, '..', 'package.json')).version,
+    installedAt:  new Date().toISOString(),
+    backedUp,
+    createdFiles,
+    addedPlugins,
+    npmPackages:  packages,
+  };
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+
+  console.log('\n  ✓ Done! Start OpenCode as normal — tonyai dashboard runs at http://localhost:6969');
   console.log('\n  Run: opencode\n');
+  console.log('  To undo everything: tonyai uninstall\n');
 }
 
-// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- tonyai uninstall -------------------------------------------------------
+
+async function cmdUninstall() {
+  const configDir    = join(os.homedir(), '.config', 'opencode');
+  const manifestPath = join(configDir, 'tonyai-manifest.json');
+
+  console.log('\n  tonyai uninstall\n');
+
+  if (!existsSync(manifestPath)) {
+    console.log('  No tonyai installation found (manifest missing).');
+    console.log('  If you installed manually, remove files from ~/.config/opencode/ by hand.\n');
+    process.exit(0);
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  } catch {
+    console.error('  Could not read tonyai-manifest.json. Aborting.');
+    process.exit(1);
+  }
+
+  const answer = await prompt('  This will restore your previous opencode.json and remove all tonyai files.\n  Continue? (y/N) ');
+  closeRL();
+  if (answer.trim().toLowerCase() !== 'y') {
+    console.log('\n  Aborted.\n');
+    process.exit(0);
+  }
+
+  console.log('');
+
+  // Restore opencode.json backup
+  const opencodePath  = join(configDir, 'opencode.json');
+  const opencodeBackup = join(configDir, 'opencode.json.tonyai.bak');
+
+  if (existsSync(opencodeBackup)) {
+    copyFileSync(opencodeBackup, opencodePath);
+    tryUnlink(opencodeBackup);
+    console.log('  ✓ opencode.json restored from backup');
+  } else if (manifest.addedPlugins && manifest.addedPlugins.length > 0) {
+    // No backup but we know what plugins we added — remove just those
+    try {
+      const ocConfig = JSON.parse(readFileSync(opencodePath, 'utf8'));
+      ocConfig.plugin = (ocConfig.plugin || []).filter(p => !manifest.addedPlugins.includes(p));
+      writeFileSync(opencodePath, JSON.stringify(ocConfig, null, 2) + '\n', 'utf8');
+      console.log('  ✓ opencode.json — removed tonyai plugin entries');
+    } catch {
+      console.warn('  ⚠  Could not patch opencode.json — check it manually');
+    }
+  }
+
+  // Remove files created by install
+  for (const rel of (manifest.createdFiles || [])) {
+    const full = join(configDir, rel);
+    if (tryUnlink(full)) {
+      console.log(`  ✓ removed ${rel}`);
+    }
+  }
+
+  // Remove manifest itself
+  tryUnlink(manifestPath);
+  console.log('  ✓ removed tonyai-manifest.json');
+
+  // Npm packages — inform but don't auto-remove (could break other things)
+  if (manifest.npmPackages && manifest.npmPackages.length > 0) {
+    console.log('\n  npm packages were installed to ~/.config/opencode/.');
+    console.log('  To remove them run:');
+    console.log(`    cd "${configDir}" && npm uninstall ${manifest.npmPackages.join(' ')}`);
+  }
+
+  console.log('\n  ✓ tonyai uninstalled. Your previous OpenCode setup is restored.\n');
+}
+
+// --- Helpers ----------------------------------------------------------------
 
 function checkCmd(cmd) {
   try { execSync(`${cmd} --version`, { stdio: 'ignore', timeout: 5000 }); return true; }
@@ -271,7 +383,10 @@ function fetchWithTimeout(url, ms) {
   return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
-// Single shared readline interface for the install wizard
+function tryUnlink(p) {
+  try { unlinkSync(p); return true; } catch { return false; }
+}
+
 let _rl = null;
 function getRL() {
   if (!_rl) _rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -289,60 +404,51 @@ function buildMemConfig(isCloud, fastModel) {
   const cloudUrl = 'https://ollama.com/v1';
 
   return {
-    // Embeddings â€” always local Ollama (free)
     embeddingApiUrl: localUrl,
     embeddingApiKey: 'ollama',
-    embeddingModel: 'bge-m3',
+    embeddingModel:  'bge-m3',
 
-    // LLM for memory extraction
-    memoryProvider: 'openai-chat',
-    memoryApiUrl:   isCloud ? cloudUrl  : localUrl,
-    memoryApiKey:   isCloud ? 'env://OLLAMA_API_KEY' : 'ollama',
-    memoryModel:    isCloud ? 'deepseek-v4-flash' : fastModel,
+    memoryProvider:    'openai-chat',
+    memoryApiUrl:      isCloud ? cloudUrl  : localUrl,
+    memoryApiKey:      isCloud ? 'env://OLLAMA_API_KEY' : 'ollama',
+    memoryModel:       isCloud ? 'deepseek-v4-flash' : fastModel,
     memoryTemperature: 0.3,
 
-    // OpenCode provider registration
     opencodeProvider: isCloud ? 'ollama-cloud' : 'ollama',
     opencodeModel:    isCloud ? 'deepseek-v4-flash' : fastModel,
 
-    // Web UI (http://localhost:4747)
     webServerEnabled: true,
     webServerPort:    4747,
     webServerHost:    '127.0.0.1',
 
-    // Auto-capture from conversations
     autoCaptureEnabled:       true,
     autoCaptureMaxIterations: 5,
     autoCaptureMaxRetries:    3,
 
-    // Deduplication
-    deduplicationEnabled:              true,
-    deduplicationSimilarityThreshold:  0.90,
+    deduplicationEnabled:             true,
+    deduplicationSimilarityThreshold: 0.90,
 
-    // Memory retention
     autoCleanupEnabled:       true,
     autoCleanupRetentionDays: 30,
 
-    // Inject top memories at start of each new session
     chatMessage: {
-      enabled:              true,
-      maxMemories:          3,
-      injectOn:             'first',
+      enabled:               true,
+      maxMemories:           3,
+      injectOn:              'first',
       excludeCurrentSession: true,
     },
 
-    // User profile learning
-    injectProfile:                true,
-    userProfileAnalysisInterval:  10,
-    userProfileMaxPreferences:    20,
-    userProfileMaxPatterns:       15,
+    injectProfile:               true,
+    userProfileAnalysisInterval: 10,
+    userProfileMaxPreferences:   20,
+    userProfileMaxPatterns:      15,
 
     similarityThreshold: 0.6,
     maxMemories:         10,
     memory:              { defaultScope: 'project' },
 
-    showAutoCaptureToasts:  true,
-    showUserProfileToasts:  true,
-    showErrorToasts:        true,
+    showAutoCaptureToasts: true,
+    showUserProfileToasts: true,
+    showErrorToasts:       true,
   };
 }
