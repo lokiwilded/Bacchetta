@@ -8,9 +8,8 @@ module.exports.handler = async function handler(req, res, url, ctx) {
   if (req.method === 'GET') {
     const port = parseInt(url.searchParams.get('port') || '');
     const dir  = url.searchParams.get('dir') || '';
-    if (!port) { res.writeHead(400, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'port required' })); }
 
-    // Query the DB directly by worktree — reliable, doesn't depend on OpenCode API filtering
+    // Query the DB directly by worktree — reliable, doesn't depend on OpenCode API
     if (dir && ctx.dataDir) {
       try {
         const fs       = require('node:fs');
@@ -48,23 +47,9 @@ module.exports.handler = async function handler(req, res, url, ctx) {
       }
     }
 
-    // Fallback (no dir param): ask OpenCode directly
-    try {
-      const projRes = await fetch(`http://127.0.0.1:${port}/project/current`, { signal: AbortSignal.timeout(3000) });
-      if (!projRes.ok) { res.writeHead(502, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'opencode not responding' })); }
-      const proj = await projRes.json();
-      const sesRes = await fetch(`http://127.0.0.1:${port}/session`, { signal: AbortSignal.timeout(3000) });
-      if (!sesRes.ok) { res.writeHead(502, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'could not fetch sessions' })); }
-      const all = await sesRes.json();
-      const sessions = (Array.isArray(all) ? all : [])
-        .filter(s => s.projectID === proj.id)
-        .sort((a, b) => b.time.updated - a.time.updated);
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      return res.end(JSON.stringify({ sessions, directory: proj.worktree }));
-    } catch (e) {
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: String(e) }));
-    }
+    // No dir param — can't look up without a directory
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'dir parameter required' }));
   }
 
   if (req.method === 'POST') {
