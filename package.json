@@ -1,6 +1,6 @@
 {
   "name": "tony",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Multi-agent AI coding dashboard for OpenCode — works with Ollama Cloud, local Ollama, or any OpenCode-supported provider",
   "keywords": ["opencode", "ai", "dashboard", "ollama", "llm", "developer-tools", "agents"],
   "license": "MIT",

@@ -4,3 +4,8 @@ overlay/
 docker-compose.yml
 .env.example
 start-dashboard.vbs
+server/node_modules/
+server/tests/
+docs/
+.claude/
+*.vbs
