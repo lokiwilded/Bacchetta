@@ -19,10 +19,6 @@
   "memoryModel": "deepseek-v4-flash",
   "memoryTemperature": 0.3,
 
-  // ── OpenCode provider registration ──────────────────────────────────────────
-  "opencodeProvider": "ollama-cloud",
-  "opencodeModel": "deepseek-v4-flash",
-
   // ── Web UI ──────────────────────────────────────────────────────────────────
   "webServerEnabled": true,
   "webServerPort": 4747,

@@ -1,7 +1,7 @@
 ---
 description: Deep investigation and research — semantic code search, codebase exploration, written analysis. Read-only.
 mode: subagent
-model: ollama-cloud/kimi-k2.6
+model: ollama-cloud/deepseek-v4-flash
 permission:
   edit: deny
   write: deny

@@ -22,29 +22,28 @@ function write(data) {
   writeFileSync(PROJECTS_PATH, JSON.stringify(data, null, 2));
 }
 
-function openTerminal(cwd) {
+function openTerminal(cwd, sessionId) {
+  const cmd = sessionId ? `opencode -s ${sessionId}` : 'opencode';
   if (isWin) {
-    // Try Windows Terminal first, fall back to cmd.exe
     try {
-      spawn('wt', ['-d', cwd, 'cmd', '/k', 'opencode'], {
-        detached: true, stdio: 'ignore', shell: true,
+      spawn('wt', ['-d', cwd, 'cmd', '/k', cmd], {
+        detached: true, stdio: 'ignore',
       }).unref();
       return;
     } catch {}
-    spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', `cd /d "${cwd}" && opencode`], {
+    spawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', `cd /d "${cwd}" && ${cmd}`], {
       detached: true, stdio: 'ignore',
     }).unref();
   } else if (isMac) {
     spawn('osascript', [
-      '-e', `tell application "Terminal" to do script "cd '${cwd.replace(/'/g, "'\\''")}' && opencode"`,
+      '-e', `tell application "Terminal" to do script "cd '${cwd.replace(/'/g, "'\\''")}' && ${cmd}"`,
       '-e', 'tell application "Terminal" to activate',
     ], { detached: true, stdio: 'ignore' }).unref();
   } else {
-    // Linux — try common terminals in order
     const terminals = [
-      ['gnome-terminal', ['--working-directory', cwd, '--', 'bash', '-c', 'opencode; exec bash']],
-      ['konsole',        ['--workdir', cwd, '-e', 'bash', '-c', 'opencode; exec bash']],
-      ['xterm',          ['-e', `bash -c "cd '${cwd}' && opencode; exec bash"`]],
+      ['gnome-terminal', ['--working-directory', cwd, '--', 'bash', '-c', `${cmd}; exec bash`]],
+      ['konsole',        ['--workdir', cwd, '-e', 'bash', '-c', `${cmd}; exec bash`]],
+      ['xterm',          ['-e', `bash -c "cd '${cwd}' && ${cmd}; exec bash"`]],
     ];
     for (const [term, args] of terminals) {
       try { spawn(term, args, { detached: true, stdio: 'ignore' }).unref(); return; } catch {}
@@ -104,6 +103,27 @@ module.exports.handler = async function handler(req, res) {
         return res.end(JSON.stringify({ error: `Directory not found: ${cwd}` }));
       }
       openTerminal(cwd);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ ok: true }));
+    }
+
+    if (action === 'resume') {
+      const data    = read();
+      const project = data.projects.find(p => p.id === body.id);
+      if (!project) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'project not found' }));
+      }
+      if (!body.sessionId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'sessionId required' }));
+      }
+      const cwd = isWin ? project.directory.replace(/\//g, '\\') : project.directory;
+      if (!existsSync(cwd)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: `Directory not found: ${cwd}` }));
+      }
+      openTerminal(cwd, body.sessionId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ ok: true }));
     }

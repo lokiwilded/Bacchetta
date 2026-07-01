@@ -16,7 +16,7 @@ const OWN_API = new Set([
   '/api/usage', '/api/monitor', '/api/agents', '/api/models',
   '/api/projects', '/api/rag/status', '/api/rag/index', '/api/settings',
   '/api/sessions', '/api/memory', '/api/memory/search', '/api/memory/profile',
-  '/api/opencode-mem',
+  '/api/opencode-mem', '/api/docs',
 ]);
 
 const MIME = {
@@ -57,6 +57,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/sessions')                               return require('./routes/sessions').handler(req, res, url, ctx);
       if (p === '/api/memory' || p.startsWith('/api/memory/')) return require('./routes/memory').handler(req, res, url, ctx);
       if (p === '/api/opencode-mem')                           return require('./routes/opencode-mem').handler(req, res);
+      if (p === '/api/docs')                                   return require('./routes/docs').handler(req, res, url, ctx);
     }
 
     // Static files in public/
@@ -84,9 +85,17 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+server.on('error', err => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n  Port ${PORT} is already in use.\n  Run: bacchetta restart\n`);
+    process.exit(1);
+  }
+  throw err;
+});
+
 server.listen(PORT, () => {
   const lan = getLAN();
-  console.log(`\n  tonyai dashboard  →  http://localhost:${PORT}/`);
+  console.log(`\n  bacchetta dashboard  →  http://localhost:${PORT}/`);
   if (lan) console.log(`  On your network   →  http://${lan}:${PORT}`);
   console.log();
 });
@@ -99,6 +108,25 @@ function getLAN() {
   } catch {}
   return null;
 }
+
+// ─── CF docs — daily staleness refresh ───────────────────────────────────────
+
+let _lastDocsCheck = 0;
+async function docsRefreshTick() {
+  if (Date.now() - _lastDocsCheck < 23 * 60 * 60 * 1000) return; // once per ~day
+  _lastDocsCheck = Date.now();
+  try {
+    const { refreshAllDocs } = require('./routes/docs');
+    const results = await refreshAllDocs(false);
+    const updated = results.filter(r => r.updated).length;
+    if (updated > 0) console.log(`  ✓ cf-docs: refreshed ${updated} product(s)`);
+  } catch (e) {
+    console.error('  ✗ cf-docs refresh failed:', e.message);
+  }
+}
+
+setInterval(docsRefreshTick, 60 * 60 * 1000).unref(); // check hourly, don't block exit
+setTimeout(docsRefreshTick, 15_000).unref();           // initial check 15s after startup
 
 // ─── Ensure memory-keeper agent exists ───────────────────────────────────────
 

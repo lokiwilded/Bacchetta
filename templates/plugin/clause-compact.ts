@@ -13,7 +13,7 @@ function loadSettings() {
 
 export const server: Plugin = async ({ client }) => {
   const s = loadSettings()
-  const COMPACT_AFTER: number = s.compact_after ?? 10
+  const COMPACT_AFTER: number = s.compact_after ?? 30
 
   const counts  = new Map<string, number>()
   const pending = new Set<string>()
@@ -39,9 +39,13 @@ export const server: Plugin = async ({ client }) => {
           path: { id: sid },
           body: { providerID: "ollama-cloud", modelID: "deepseek-v4-flash" },
         })
-      } catch (e) {
-        console.error("[clause-compact] failed:", e)
-        await toast("Auto-compact failed — run /compact manually", "error")
+      } catch (e: any) {
+        const msg = String(e?.message ?? e)
+        console.error("[clause-compact] failed:", msg)
+        // Only show toast for non-trivial errors (skip "session not found" on fresh DB)
+        if (!msg.includes("not found") && !msg.includes("no session")) {
+          await toast("Auto-compact failed — run /compact manually", "error")
+        }
       } finally {
         pending.delete(sid)
       }

@@ -7,24 +7,27 @@ const OPUS_RATE   = { in: 15,  out: 75 };  // USD per million tokens
 const OLLAMA_GBP  = 15;                     // £/month Ollama Cloud subscription
 const GBP_PER_USD = 0.79;
 
-// Comparison API rates (USD per million tokens)
-const COMPARE = {
-  'Claude Opus 4.8': { in: 15,   out: 75,  color: '#f59e0b' },
-  'Claude Sonnet 4': { in: 3,    out: 15,  color: '#6366f1' },
-  'Gemini 1.5 Pro':  { in: 1.25, out: 5,   color: '#22d3ee' },
-  'GPT-4o':          { in: 2.5,  out: 10,  color: '#10b981' },
-};
+function opusCost(i, o) { return ((i||0)/1e6*OPUS_RATE.in) + ((o||0)/1e6*OPUS_RATE.out); }
+function toGbp(usd)     { return usd * GBP_PER_USD; }
 
-// Subscription prices £/month
-const SUBSCRIPTIONS = {
-  'Claude Pro':    18,
-  'Google One AI': 19,
-  'ChatGPT Plus':  16,
-};
-
-function opusCost(i, o)       { return ((i||0)/1e6*OPUS_RATE.in) + ((o||0)/1e6*OPUS_RATE.out); }
-function apiCost(rate, i, o)  { return ((i||0)/1e6*rate.in)      + ((o||0)/1e6*rate.out); }
-function toGbp(usd)           { return usd * GBP_PER_USD; }
+// Classify a model ID into opus / sonnet / haiku bucket.
+function modelTier(modelId) {
+  if (!modelId) return 'sonnet';
+  const m = modelId.toLowerCase();
+  if (
+    m.includes('opus') || m.includes(':ultra') || m.includes('-ultra') ||
+    m.includes('deepseek-v4') || m.includes('deepseek-r1') || m.includes(':r1') ||
+    m.includes('kimi-k2') || m.includes('2.5-pro') ||
+    (m.includes('-pro') && m.includes(':cloud')) ||
+    m.includes('70b') || m.includes('72b') || m.includes('405b')
+  ) return 'opus';
+  if (
+    m.includes('haiku') || m.includes('flash') || m.includes('mini') ||
+    m.includes('turbo') || m.includes('lite') || m.includes('minimax') ||
+    m.includes('1b') || m.includes('3b') || m.includes('7b') || m.includes('8b')
+  ) return 'haiku';
+  return 'sonnet';
+}
 
 module.exports.handler = async function handler(_req, res, _url, ctx) {
   try {
@@ -81,12 +84,24 @@ module.exports.handler = async function handler(_req, res, _url, ctx) {
       LIMIT 200
     `).all();
 
+    // Active time = sum of gaps between consecutive parts where gap <= 5 min.
     const sessionTimes = db.prepare(`
-      SELECT s.id,
-        MIN((MAX(p.time_created)-MIN(p.time_created))/1000.0,14400) as active_secs
-      FROM session s JOIN part p ON p.session_id=s.id
-      WHERE s.tokens_input>0 OR s.tokens_output>0
-      GROUP BY s.id
+      SELECT s.id, json_extract(s.model,'$.id') as model_id,
+        COALESCE(gaps.active_secs, 0) as active_secs
+      FROM session s
+      LEFT JOIN (
+        SELECT session_id,
+          SUM(CASE WHEN gap_secs > 0 AND gap_secs <= 300 THEN gap_secs ELSE 0 END) as active_secs
+        FROM (
+          SELECT session_id,
+            (time_created - LAG(time_created, 1, time_created) OVER (
+              PARTITION BY session_id ORDER BY time_created
+            )) / 1000.0 AS gap_secs
+          FROM part
+        )
+        GROUP BY session_id
+      ) gaps ON gaps.session_id = s.id
+      WHERE s.tokens_input > 0 OR s.tokens_output > 0
     `).all();
 
     const totals = db.prepare(`
@@ -103,36 +118,37 @@ module.exports.handler = async function handler(_req, res, _url, ctx) {
 
     db.close();
 
+    // Aggregate active time
     const activeById = {};
     let totalActive = 0;
     for (const r of sessionTimes) {
-      activeById[r.id] = r.active_secs || 0;
-      totalActive += r.active_secs || 0;
+      const secs = r.active_secs || 0;
+      activeById[r.id] = secs;
+      totalActive += secs;
     }
 
     const totalIn  = totals?.total_input  || 0;
     const totalOut = totals?.total_output || 0;
-    const totalOpusUsd = opusCost(totalIn, totalOut);
-    const totalOpusGbp = toGbp(totalOpusUsd);
+    const totalOpusGbp = toGbp(opusCost(totalIn, totalOut));
 
     const firstDay   = totals?.first_day ? new Date(totals.first_day) : new Date();
     const lastDay    = totals?.last_day  ? new Date(totals.last_day)  : new Date();
     const daysOfData = Math.max(1, Math.round((lastDay - firstDay) / 86400000) + 1);
     const ollamaCost = (daysOfData / 30) * OLLAMA_GBP;
 
-    // Group sessions by project
+    // Group sessions by project for detail rows
     const byProjMap = {};
     for (const s of topSessionsRaw) {
       if (!byProjMap[s.project_id]) byProjMap[s.project_id] = [];
       byProjMap[s.project_id].push({
-        id:          s.id,
-        title:       s.title,
-        agent:       s.agent,
-        model_id:    s.model_id,
+        id:            s.id,
+        title:         s.title,
+        agent:         s.agent,
+        model_id:      s.model_id,
         input_tokens:  s.tokens_input,
         output_tokens: s.tokens_output,
-        day:         s.day,
-        active_secs: Math.round(activeById[s.id] || 0),
+        day:           s.day,
+        active_secs:   Math.round(activeById[s.id] || 0),
         opus_cost_gbp: toGbp(opusCost(s.tokens_input, s.tokens_output)),
       });
     }
@@ -157,25 +173,8 @@ module.exports.handler = async function handler(_req, res, _url, ctx) {
         total_active_secs:     Math.round(totalActive),
         total_opus_cost_gbp:   totalOpusGbp,
         estimated_ollama_cost: ollamaCost,
-        savings_gbp:           totalOpusGbp - ollamaCost,
         days_of_data:          daysOfData,
       },
-      comparisons: Object.entries(COMPARE).map(([name, rate]) => {
-        const costUsd = apiCost(rate, totalIn, totalOut);
-        return {
-          name,
-          color:       rate.color,
-          cost_gbp:    toGbp(costUsd),
-          savings_gbp: toGbp(costUsd) - ollamaCost,
-        };
-      }),
-      subscriptions: Object.entries(SUBSCRIPTIONS).map(([name, monthly]) => ({
-        name,
-        monthly_gbp: monthly,
-        your_monthly: OLLAMA_GBP,
-        you_save_monthly: monthly - OLLAMA_GBP,
-      })),
-      ollama_monthly_gbp: OLLAMA_GBP,
     };
 
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

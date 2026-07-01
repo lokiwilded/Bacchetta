@@ -2,7 +2,7 @@
 'use strict';
 
 if (parseInt(process.versions.node) < 18) {
-  console.error('  tonyai requires Node.js 18 or later. Current: ' + process.version);
+  console.error('  bacchetta requires Node.js 18 or later. Current: ' + process.version);
   process.exit(1);
 }
 
@@ -16,19 +16,26 @@ const os                                                         = require('os')
 const args = process.argv.slice(2);
 const cmd  = args[0];
 
+const SEARXNG_CONTAINER = 'bacchetta-searxng';
+const SEARXNG_PORT      = 8888;
+const SEARXNG_CONFIG    = join(os.homedir(), '.config', 'searxng');
+const SEARXNG_SETTINGS  = join(SEARXNG_CONFIG, 'settings.yml');
+
 const HELP = `
-  tonyai — OpenCode multi-agent dashboard
+  bacchetta — OpenCode multi-agent dashboard
 
   Usage:
-    tonyai install      Set up your environment (run this first)
-    tonyai uninstall    Remove tonyai and restore your previous OpenCode config
-    tonyai start        Start the tonyai dashboard server on :6969
-    tonyai --help       Show this help
+    bacchetta install      Set up your environment (run this first)
+    bacchetta uninstall    Remove bacchetta and restore your previous OpenCode config
+    bacchetta start        Start the dashboard server on :6969
+    bacchetta restart      Kill any running instance and start fresh
+    bacchetta --help       Show this help
 
   Examples:
-    tonyai install      # First-time setup wizard
-    tonyai start        # Start the dashboard, then run: opencode
-    tonyai uninstall    # Full cleanup, restores original opencode.json
+    bacchetta install      # First-time setup wizard
+    bacchetta start        # Start the dashboard, then run: opencode
+    bacchetta restart      # Use this after npm install -g bacchetta@latest
+    bacchetta uninstall    # Full cleanup, restores original opencode.json
 `;
 
 if (!cmd || cmd === '--help' || cmd === '-h') {
@@ -37,7 +44,9 @@ if (!cmd || cmd === '--help' || cmd === '-h') {
 }
 
 if (cmd === 'start') {
-  cmdStart();
+  cmdStart(false);
+} else if (cmd === 'restart') {
+  cmdStart(true);
 } else if (cmd === 'install') {
   cmdInstall().catch(err => {
     console.error('\n  Error:', err.message);
@@ -54,22 +63,155 @@ if (cmd === 'start') {
   process.exit(1);
 }
 
-// --- tonyai start -----------------------------------------------------------
+// --- SearXNG ----------------------------------------------------------------
 
-function cmdStart() {
+const SEARXNG_YML = `\
+use_default_settings: true
+
+server:
+  secret_key: "bacchetta-searxng-localkey-7x9k2m"
+  limiter: false
+  image_proxy: false
+  port: 8080
+  bind_address: "0.0.0.0"
+
+search:
+  safe_search: 0
+  default_lang: "en"
+  formats:
+    - html
+    - json
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+    disabled: false
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+    disabled: false
+  - name: bing
+    engine: bing
+    shortcut: b
+    disabled: false
+  - name: github
+    engine: github
+    shortcut: gh
+    disabled: false
+  - name: stackoverflow
+    engine: stackoverflow
+    shortcut: so
+    disabled: false
+  - name: npm
+    engine: npm
+    shortcut: npm
+    disabled: false
+  - name: mdn
+    engine: mdn
+    shortcut: mdn
+    disabled: false
+`;
+
+function startSearXNG() {
+  if (!checkCmd('docker')) {
+    console.log('  ⚠  Docker not found — SearXNG web search unavailable (install Docker Desktop to enable)');
+    return;
+  }
+
+  mkdirSync(SEARXNG_CONFIG, { recursive: true });
+  if (!existsSync(SEARXNG_SETTINGS)) {
+    writeFileSync(SEARXNG_SETTINGS, SEARXNG_YML, 'utf8');
+  }
+
+  try {
+    const state = execSync(
+      `docker inspect --format={{.State.Status}} ${SEARXNG_CONTAINER}`,
+      { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim().replace(/"/g, '');
+
+    if (state === 'running') {
+      console.log(`  ✓ SearXNG already running → http://localhost:${SEARXNG_PORT}`);
+      return;
+    }
+
+    execSync(`docker start ${SEARXNG_CONTAINER}`, { stdio: 'ignore', timeout: 10000 });
+    console.log(`  ✓ SearXNG started → http://localhost:${SEARXNG_PORT}`);
+  } catch {
+    // Container doesn't exist — clean up any old tonyai container that may hold the port
+    try { execSync('docker rm -f tonyai-searxng', { stdio: 'ignore', timeout: 5000 }); } catch {}
+
+    console.log('  ↓ Setting up SearXNG web search (first run — ~150MB download)…');
+    try {
+      execSync(
+        `docker run -d --name ${SEARXNG_CONTAINER} -p ${SEARXNG_PORT}:8080 -v "${SEARXNG_CONFIG}:/etc/searxng:rw" --restart unless-stopped searxng/searxng`,
+        { stdio: 'pipe', timeout: 180000 }
+      );
+      console.log(`  ✓ SearXNG ready → http://localhost:${SEARXNG_PORT}`);
+    } catch (err) {
+      const msg = String(err.message || '');
+      if (msg.includes('port is already allocated') || msg.includes('address already in use')) {
+        console.log(`  ⚠  Port ${SEARXNG_PORT} is in use by another process — SearXNG skipped`);
+        console.log(`     Free port ${SEARXNG_PORT} then run: bacchetta restart`);
+      } else {
+        console.log(`  ⚠  SearXNG setup failed: ${msg.split('\n')[0]}`);
+      }
+    }
+  }
+}
+
+// --- bacchetta start / restart ----------------------------------------------
+
+function killPort(port) {
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync(`netstat -ano -p TCP 2>NUL`, { encoding: 'utf8', timeout: 5000 });
+      const re  = new RegExp(`:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`, 'i');
+      const m   = out.match(re);
+      if (m) execSync(`taskkill /PID ${m[1]} /F`, { stdio: 'ignore', timeout: 5000 });
+    } else {
+      execSync(`lsof -ti:${port} | xargs kill -9 2>/dev/null || true`, { stdio: 'ignore', timeout: 5000 });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cmdStart(kill) {
+  const PORT = 6969;
   const serverPath = join(__dirname, '..', 'server', 'index.js');
-  console.log('\n  tonyai dashboard → http://localhost:6969\n');
+
+  if (kill) {
+    console.log('\n  bacchetta → stopping any running instance…');
+    killPort(PORT);
+    const until = Date.now() + 1200;
+    while (Date.now() < until) { /* spin */ }
+  }
+
+  startSearXNG();
+  console.log('\n  bacchetta dashboard → http://localhost:6969\n');
   const child = spawn(process.execPath, [serverPath], { stdio: 'inherit' });
   child.on('error', err => {
-    console.error('  server error:', err.message);
+    if (err.code === 'EADDRINUSE' || String(err).includes('EADDRINUSE')) {
+      console.error(`\n  Port ${PORT} is already in use. Run: bacchetta restart\n`);
+    } else {
+      console.error('  server error:', err.message);
+    }
     process.exit(1);
   });
-  child.on('exit', code => process.exit(code || 0));
+  child.on('exit', code => {
+    if (code === 98 || code === 48) {
+      console.error(`\n  Port ${PORT} is already in use. Run: bacchetta restart\n`);
+      process.exit(1);
+    }
+    process.exit(code || 0);
+  });
   process.on('SIGINT',  () => { try { child.kill('SIGTERM'); } catch {} process.exit(0); });
   process.on('SIGTERM', () => { try { child.kill('SIGTERM'); } catch {} process.exit(0); });
 }
 
-// --- tonyai install ---------------------------------------------------------
+// --- bacchetta install ------------------------------------------------------
 
 async function cmdInstall() {
   const configDir  = join(os.homedir(), '.config', 'opencode');
@@ -77,10 +219,10 @@ async function cmdInstall() {
   const agentsDir  = join(configDir, 'agents');
   const pkgDir     = join(__dirname, '..');
   const tmplDir    = join(pkgDir, 'templates');
-  const manifestPath = join(configDir, 'tonyai-manifest.json');
+  const manifestPath = join(configDir, 'bacchetta-manifest.json');
 
-  console.log('\n  tonyai — OpenCode multi-agent dashboard\n');
-  console.log('  Checking prerequisites...');
+  console.log('\n  bacchetta — OpenCode multi-agent dashboard\n');
+  console.log('  Checking prerequisites...\n');
 
   // opencode
   const hasOpencode = checkCmd('opencode');
@@ -93,6 +235,15 @@ async function cmdInstall() {
       console.log('  ⚠  opencode found but `opencode serve` is not available.');
       console.log('    Make sure you have opencode-ai >= 0.3.0: npm install -g opencode-ai\n');
     }
+  }
+
+  // Detect existing OpenCode setup
+  const opencodePath   = join(configDir, 'opencode.json');
+  const existingConfig = existsSync(opencodePath);
+  if (existingConfig) {
+    console.log('\n  Detected existing OpenCode setup.');
+    console.log('  Your opencode.json will be backed up before any changes are made.');
+    console.log('  Running bacchetta uninstall will restore it exactly as it is now.\n');
   }
 
   // Ollama + bge-m3
@@ -109,7 +260,7 @@ async function cmdInstall() {
   } catch {}
 
   console.log(`  ${ollamaOk ? '✓' : '✗'} Ollama running at localhost:11434`);
-  console.log(`  ${hasBgeM3 ? '✓' : '✗'} bge-m3 embedding model available${!hasBgeM3 && ollamaOk ? '  (run: ollama pull bge-m3)' : ''}`);
+  console.log(`  ${hasBgeM3 ? '✓' : '✗'} bge-m3 embedding model${!hasBgeM3 && ollamaOk ? '  (run: ollama pull bge-m3)' : ''}`);
   console.log('');
 
   // -- Provider setup --------------------------------------------------------
@@ -128,19 +279,38 @@ async function cmdInstall() {
 
   if (isCloud) {
     apiKey = process.env.OLLAMA_API_KEY || '';
-    if (!apiKey) {
-      apiKey = (await prompt('  ? Ollama API key (from ollama.com/settings/keys): ')).trim();
+    if (apiKey) {
+      console.log('  ✓ OLLAMA_API_KEY found in environment\n');
+    } else {
+      console.log('  Get your API key from: https://ollama.com/settings/keys\n');
+      apiKey = (await prompt('  ? Ollama Cloud API key: ')).trim();
       if (apiKey) {
-        console.log(`  Add OLLAMA_API_KEY=${apiKey} to your shell profile to persist this.`);
+        console.log('\n  Save this to your environment so you only do this once:');
+        if (process.platform === 'win32') {
+          console.log(`    setx OLLAMA_API_KEY "${apiKey}"`);
+          console.log('    (open a new terminal after running setx)\n');
+        } else {
+          const profile = (process.env.SHELL || '').includes('zsh') ? '~/.zshrc' : '~/.bashrc';
+          console.log(`    echo 'export OLLAMA_API_KEY="${apiKey}"' >> ${profile}`);
+          console.log(`    source ${profile}\n`);
+        }
       }
     }
-    primaryModel = 'ollama-cloud/glm-5.2';
-    fastModel    = 'ollama-cloud/deepseek-v4-flash';
+    primaryModel = 'ollama-cloud/kimi-k2.6';
+    fastModel    = 'ollama-cloud/gemini-3-flash-preview:cloud';
   } else {
-    primaryModel = (await prompt('  ? Primary model (e.g. qwen2.5-coder:32b, llama3.3:70b): ')).trim();
-    fastModel    = (await prompt('  ? Fast model for quick tasks (e.g. qwen2.5:7b): ')).trim();
-    if (!primaryModel) primaryModel = 'qwen2.5-coder:32b';
+    console.log('  Recommended models by hardware:\n');
+    console.log('     8GB  VRAM/RAM  →  qwen2.5-coder:7b, gemma3:4b');
+    console.log('    16GB  VRAM/RAM  →  qwen2.5-coder:14b');
+    console.log('    32GB+ VRAM/RAM  →  qwen2.5-coder:32b, llama3.3:70b\n');
+    primaryModel = (await prompt('  ? Primary model (for coding tasks): ')).trim();
+    fastModel    = (await prompt('  ? Fast model (for quick edits, defaults to same): ')).trim();
+    if (!primaryModel) primaryModel = 'qwen2.5-coder:14b';
     if (!fastModel)    fastModel    = primaryModel;
+    console.log('\n  Pull your models now (or run these later):');
+    console.log(`    ollama pull ${primaryModel}`);
+    if (fastModel !== primaryModel) console.log(`    ollama pull ${fastModel}`);
+    console.log('    ollama pull bge-m3\n');
   }
 
   closeRL();
@@ -149,14 +319,13 @@ async function cmdInstall() {
   mkdirSync(configDir, { recursive: true });
 
   // -- Backup opencode.json before touching it -------------------------------
-  const opencodePath  = join(configDir, 'opencode.json');
-  const opencodeBackup = join(configDir, 'opencode.json.tonyai.bak');
+  const opencodeBackup = join(configDir, 'opencode.json.bacchetta.bak');
   const backedUp = [];
 
   if (existsSync(opencodePath) && !existsSync(opencodeBackup)) {
     copyFileSync(opencodePath, opencodeBackup);
     backedUp.push('opencode.json');
-    console.log('  ✓ opencode.json backed up → opencode.json.tonyai.bak');
+    console.log('  ✓ opencode.json backed up → opencode.json.bacchetta.bak');
   }
 
   // -- npm install -----------------------------------------------------------
@@ -229,8 +398,9 @@ async function cmdInstall() {
       const tmpl = JSON.parse(readFileSync(join(tmplDir, 'opencode.json'), 'utf8'));
       ocConfig.provider['ollama-cloud'] = tmpl.provider['ollama-cloud'];
     }
-    if (!ocConfig.model)       ocConfig.model       = 'ollama-cloud/glm-5.2';
-    if (!ocConfig.small_model) ocConfig.small_model = 'ollama-cloud/deepseek-v4-flash';
+    // Only set models if not already configured — preserve existing user choices
+    if (!ocConfig.model)       ocConfig.model       = 'ollama-cloud/kimi-k2.6';
+    if (!ocConfig.small_model) ocConfig.small_model = 'ollama-cloud/gemini-3-flash-preview:cloud';
   } else {
     if (!ocConfig.model)       ocConfig.model       = `ollama/${primaryModel}`;
     if (!ocConfig.small_model) ocConfig.small_model = `ollama/${fastModel}`;
@@ -271,7 +441,7 @@ async function cmdInstall() {
     console.log('  ✓ opencode-mem.jsonc created');
   }
 
-  // clause-settings.json (used internally by the tonyai server)
+  // clause-settings.json (used internally by the bacchetta server)
   const settingsPath = join(configDir, 'clause-settings.json');
   if (existsSync(settingsPath)) {
     console.log('  - clause-settings.json  (skipped — already exists)');
@@ -293,22 +463,24 @@ async function cmdInstall() {
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
   console.log('\n  ✓ Done!\n');
-  console.log('  Start the dashboard + OpenCode in two terminals:\n');
-  console.log('    tonyai start   # dashboard at http://localhost:6969');
-  console.log('    opencode       # in your project folder\n');
-  console.log('  To undo everything: tonyai uninstall\n');
+  console.log('  Start the dashboard:\n');
+  console.log('    bacchetta start\n');
+  console.log('  Then use OpenCode either way:\n');
+  console.log('    • Run opencode in any project folder as usual');
+  console.log('    • Or open the dashboard → Projects → add a folder → Start Session\n');
+  console.log('  To undo everything: bacchetta uninstall\n');
 }
 
-// --- tonyai uninstall -------------------------------------------------------
+// --- bacchetta uninstall ----------------------------------------------------
 
 async function cmdUninstall() {
   const configDir    = join(os.homedir(), '.config', 'opencode');
-  const manifestPath = join(configDir, 'tonyai-manifest.json');
+  const manifestPath = join(configDir, 'bacchetta-manifest.json');
 
-  console.log('\n  tonyai uninstall\n');
+  console.log('\n  bacchetta uninstall\n');
 
   if (!existsSync(manifestPath)) {
-    console.log('  No tonyai installation found (manifest missing).');
+    console.log('  No bacchetta installation found (manifest missing).');
     console.log('  If you installed manually, remove files from ~/.config/opencode/ by hand.\n');
     process.exit(0);
   }
@@ -317,11 +489,11 @@ async function cmdUninstall() {
   try {
     manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   } catch {
-    console.error('  Could not read tonyai-manifest.json. Aborting.');
+    console.error('  Could not read bacchetta-manifest.json. Aborting.');
     process.exit(1);
   }
 
-  const answer = await prompt('  This will restore your previous opencode.json and remove all tonyai files.\n  Continue? (y/N) ');
+  const answer = await prompt('  This will restore your previous opencode.json and remove all bacchetta files.\n  Continue? (y/N) ');
   closeRL();
   if (answer.trim().toLowerCase() !== 'y') {
     console.log('\n  Aborted.\n');
@@ -331,20 +503,19 @@ async function cmdUninstall() {
   console.log('');
 
   // Restore opencode.json backup
-  const opencodePath  = join(configDir, 'opencode.json');
-  const opencodeBackup = join(configDir, 'opencode.json.tonyai.bak');
+  const opencodePath   = join(configDir, 'opencode.json');
+  const opencodeBackup = join(configDir, 'opencode.json.bacchetta.bak');
 
   if (existsSync(opencodeBackup)) {
     copyFileSync(opencodeBackup, opencodePath);
     tryUnlink(opencodeBackup);
     console.log('  ✓ opencode.json restored from backup');
   } else if (manifest.addedPlugins && manifest.addedPlugins.length > 0) {
-    // No backup but we know what plugins we added — remove just those
     try {
       const ocConfig = JSON.parse(readFileSync(opencodePath, 'utf8'));
       ocConfig.plugin = (ocConfig.plugin || []).filter(p => !manifest.addedPlugins.includes(p));
       writeFileSync(opencodePath, JSON.stringify(ocConfig, null, 2) + '\n', 'utf8');
-      console.log('  ✓ opencode.json — removed tonyai plugin entries');
+      console.log('  ✓ opencode.json — removed bacchetta plugin entries');
     } catch {
       console.warn('  ⚠  Could not patch opencode.json — check it manually');
     }
@@ -360,16 +531,16 @@ async function cmdUninstall() {
 
   // Remove manifest itself
   tryUnlink(manifestPath);
-  console.log('  ✓ removed tonyai-manifest.json');
+  console.log('  ✓ removed bacchetta-manifest.json');
 
-  // Npm packages — inform but don't auto-remove (could break other things)
+  // Npm packages — inform but don't auto-remove
   if (manifest.npmPackages && manifest.npmPackages.length > 0) {
     console.log('\n  npm packages were installed to ~/.config/opencode/.');
     console.log('  To remove them run:');
     console.log(`    cd "${configDir}" && npm uninstall ${manifest.npmPackages.join(' ')}`);
   }
 
-  console.log('\n  ✓ tonyai uninstalled. Your previous OpenCode setup is restored.\n');
+  console.log('\n  ✓ bacchetta uninstalled. Your previous OpenCode setup is restored.\n');
 }
 
 // --- Helpers ----------------------------------------------------------------
@@ -413,11 +584,11 @@ function buildMemConfig(isCloud, fastModel) {
     memoryProvider:    'openai-chat',
     memoryApiUrl:      isCloud ? cloudUrl  : localUrl,
     memoryApiKey:      isCloud ? 'env://OLLAMA_API_KEY' : 'ollama',
-    memoryModel:       isCloud ? 'deepseek-v4-flash' : fastModel,
+    memoryModel:       isCloud ? 'gemini-3-flash-preview:cloud' : fastModel,
     memoryTemperature: 0.3,
 
     opencodeProvider: isCloud ? 'ollama-cloud' : 'ollama',
-    opencodeModel:    isCloud ? 'deepseek-v4-flash' : fastModel,
+    opencodeModel:    isCloud ? 'gemini-3-flash-preview:cloud' : fastModel,
 
     webServerEnabled: true,
     webServerPort:    4747,

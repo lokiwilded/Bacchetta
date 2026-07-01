@@ -18,28 +18,45 @@ module.exports.handler = async function handler(req, res, url, ctx) {
         const dbPath   = path.join(ctx.dataDir, 'opencode.db');
         if (fs.existsSync(dbPath)) {
           const db = new Database(dbPath, { readonly: true });
-          // Try both slash styles — Windows stores backslashes, frontend sends forward slashes
-          const dirAlt = dir.includes('\\') ? dir.replace(/\\/g, '/') : dir.replace(/\//g, '\\');
-          const rows = db.prepare(`
+          const normDir = dir.replace(/\\/g, '/').replace(/\/+$/, '');
+          const winDir  = normDir.replace(/\//g, '\\');
+
+          const SESSION_SQL = `
             SELECT s.id, s.title,
               CAST(s.time_created AS INTEGER) as created,
-              CAST(s.time_updated AS INTEGER) as updated
+              CAST(s.time_updated AS INTEGER) as updated,
+              pr.worktree as worktree
             FROM session s
             JOIN project pr ON pr.id = s.project_id
             WHERE (pr.worktree = ? OR pr.worktree = ?)
               AND s.parent_id IS NULL
             ORDER BY s.time_updated DESC
             LIMIT 50
-          `).all(dir, dirAlt);
+          `;
+
+          let rows = db.prepare(SESSION_SQL).all(normDir, winDir);
+          let fromParent = false;
+
+          // Fallback: no exact match → walk up the path until we find sessions
+          if (rows.length === 0) {
+            const parts = normDir.split('/');
+            for (let i = parts.length - 1; i >= 2; i--) {
+              const ancestor = parts.slice(0, i).join('/');
+              const ancestorWin = ancestor.replace(/\//g, '\\');
+              rows = db.prepare(SESSION_SQL).all(ancestor, ancestorWin);
+              if (rows.length > 0) { fromParent = true; break; }
+            }
+          }
+
           db.close();
           const sessions = rows.map(r => ({
             id: r.id,
             title: r.title || 'Untitled',
-            directory: dir,
+            directory: r.worktree || dir,
             time: { created: r.created, updated: r.updated },
           }));
           res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-          return res.end(JSON.stringify({ sessions, directory: dir }));
+          return res.end(JSON.stringify({ sessions, directory: dir, fromParent }));
         }
       } catch (e) {
         res.writeHead(500, { 'Content-Type': 'application/json' });

@@ -5,7 +5,6 @@ const { mkdirSync, existsSync }   = require('node:fs');
 const path    = require('node:path');
 const os      = require('node:os');
 const Database = require('better-sqlite3');
-const { readBody } = require('../lib/util');
 
 const OLLAMA_URL  = process.env.OLLAMA_URL          || 'http://127.0.0.1:11434';
 const EMBED_MODEL = process.env.CLAUSE_EMBED_MODEL  || 'bge-m3';
@@ -86,6 +85,15 @@ function chunkContent(content, filePath) {
     if (e >= lines.length) break;
   }
   return chunks;
+}
+
+function readBody(req) {
+  return new Promise(resolve => {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks).toString()));
+    req.on('error', () => resolve(''));
+  });
 }
 
 module.exports.handler = async function handler(req, res, url, _ctx) {

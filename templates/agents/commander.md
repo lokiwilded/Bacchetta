@@ -1,7 +1,7 @@
 ---
 description: Lightweight orchestrator — routes every task to the right subagent. Has no read/edit/bash tools — must delegate everything.
 mode: primary
-model: ollama-cloud/gemini-3-flash-preview:cloud
+model: ollama-cloud/kimi-k2.6
 permission:
   edit: deny
   write: deny

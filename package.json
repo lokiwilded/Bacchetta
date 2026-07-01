@@ -1,17 +1,17 @@
 {
-  "name": "tonyai",
-  "version": "0.2.5",
-  "description": "Multi-agent AI coding dashboard for OpenCode — works with Ollama Cloud, local Ollama, or any OpenCode-supported provider",
-  "keywords": ["opencode", "ai", "dashboard", "ollama", "llm", "developer-tools", "agents"],
+  "name": "bacchetta",
+  "version": "1.0.1",
+  "description": "Multi-agent AI coding dashboard for OpenCode — orchestrate specialists with a conductor agent",
+  "keywords": ["opencode", "ai", "dashboard", "ollama", "llm", "developer-tools", "agents", "multi-agent"],
   "license": "MIT",
-  "bin": { "tonyai": "./bin/tony.js" },
-  "files": ["bin/", "server/index.js", "server/lib/", "server/routes/", "public/", "templates/"],
+  "bin": { "bacchetta": "bin/bacchetta.js" },
+  "files": ["bin/", "server/index.js", "server/lib/", "server/routes/", "public/", "templates/", "docs/"],
   "engines": { "node": ">=18" },
   "dependencies": {
     "better-sqlite3": "^12.11.1"
   },
   "scripts": {
-    "start": "node bin/tony.js",
+    "start": "node bin/bacchetta.js",
     "build-ui": "cd ui && bun run build"
   }
 }

@@ -4,7 +4,6 @@ const fs   = require('node:fs');
 const path = require('node:path');
 const os   = require('node:os');
 const crypto = require('node:crypto');
-const { readBody } = require('../lib/util');
 
 const MEMORY_DIR = path.join(os.homedir(), '.local', 'share', 'opencode', 'clause-memory');
 
@@ -19,6 +18,15 @@ function getTopK() {
 function memPath(dir) {
   const hash = crypto.createHash('sha1').update(dir).digest('hex').slice(0, 16);
   return path.join(MEMORY_DIR, `${hash}.md`);
+}
+
+function readBody(req) {
+  return new Promise(resolve => {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks).toString()));
+    req.on('error', () => resolve(''));
+  });
 }
 
 module.exports.handler = async function handler(req, res, url) {
