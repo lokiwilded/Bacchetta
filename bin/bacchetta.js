@@ -260,7 +260,22 @@ async function cmdInstall() {
   } catch {}
 
   console.log(`  ${ollamaOk ? '✓' : '✗'} Ollama running at localhost:11434`);
-  console.log(`  ${hasBgeM3 ? '✓' : '✗'} bge-m3 embedding model${!hasBgeM3 && ollamaOk ? '  (run: ollama pull bge-m3)' : ''}`);
+  if (!hasBgeM3) {
+    console.log('  ✗ bge-m3 embedding model  ← REQUIRED for code search and memory');
+    if (ollamaOk) console.log('    Install it now: ollama pull bge-m3');
+  } else {
+    console.log('  ✓ bge-m3 embedding model');
+  }
+
+  // Docker — checked here so users know before they get to `bacchetta start`
+  const hasDocker = checkCmd('docker');
+  if (hasDocker) {
+    console.log('  ✓ Docker found  (SearXNG web search will be available)');
+  } else {
+    console.log('  ✗ Docker not found  — SearXNG web search will be unavailable');
+    console.log('    Install Docker Desktop to enable it: https://www.docker.com/products/docker-desktop');
+    console.log('    (everything else works fine without Docker)');
+  }
   console.log('');
 
   // -- Provider setup --------------------------------------------------------
@@ -329,7 +344,12 @@ async function cmdInstall() {
   }
 
   // -- npm install -----------------------------------------------------------
-  console.log('  Installing OpenCode plugins...');
+  if (process.platform === 'win32') {
+    console.log('  ⚠  Windows note: better-sqlite3 requires Visual C++ Build Tools to compile.');
+    console.log('     If the step below fails with a node-gyp error, install them first:');
+    console.log('     https://visualstudio.microsoft.com/visual-cpp-build-tools/\n');
+  }
+  console.log(`  Installing OpenCode plugins to ${configDir}...`);
   const packages = [
     'opencode-mem',
     '@tarquinen/opencode-dcp',
@@ -467,7 +487,7 @@ async function cmdInstall() {
   console.log('    bacchetta start\n');
   console.log('  Then use OpenCode either way:\n');
   console.log('    • Run opencode in any project folder as usual');
-  console.log('    • Or open the dashboard → Projects → add a folder → Start Session\n');
+  console.log('    • Or open the dashboard → Projects → add a folder → Launch New\n');
   console.log('  To undo everything: bacchetta uninstall\n');
 }
 
@@ -540,7 +560,9 @@ async function cmdUninstall() {
     console.log(`    cd "${configDir}" && npm uninstall ${manifest.npmPackages.join(' ')}`);
   }
 
-  console.log('\n  ✓ bacchetta uninstalled. Your previous OpenCode setup is restored.\n');
+  console.log('\n  ✓ bacchetta uninstalled. Your previous OpenCode setup is restored.');
+  console.log('  Note: any edits you made to bacchetta-created agent files were part of those files');
+  console.log('  and have been removed. Export custom agent prompts before uninstalling next time.\n');
 }
 
 // --- Helpers ----------------------------------------------------------------
