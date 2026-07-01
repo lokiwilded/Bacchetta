@@ -1,26 +1,26 @@
 # Bacchetta
 
-**Multi-agent AI coding dashboard for [OpenCode](https://opencode.ai)**
+**Multi-agent AI coding dashboard for [OpenCode](https://github.com/opencode-ai/opencode)**
 
 Bacchetta adds a real-time dashboard and an orchestrated agent pipeline on top of OpenCode. Instead of one model doing everything, a **commander** routes tasks to specialists — researcher, coder, reviewer, and more — with a **guardian** that strips secrets before anything touches the internet.
 
-Works with **Ollama Cloud** (no GPU needed) and **local Ollama** (for high-end setups).
+Works with **Ollama Cloud** ($20/month subscription, no GPU needed) and **local Ollama** (for high-end setups).
 
 ---
 
 ## Dashboard
 
-![Monitor page showing live agent activity](docs/images/monitor-page-with-active-session.png)
+![Projects page with active session monitor](docs/images/projects-page-mid-rag.png)
 
-*Monitor page — watch every agent step in real time, grouped by prompt*
+*Projects page — manage projects, view live sessions, launch the monitor panel*
 
 ![Agents page](docs/images/agents-page.png)
 
 *Agents page — view and edit every agent's system prompt and model*
 
-![Projects page](docs/images/projects-page-mid-rag.png)
+![Monitor page showing live agent activity](docs/images/monitor-page-with-active-session.png)
 
-*Projects page — manage multiple projects, start sessions, run RAG indexing*
+*Session monitor — watch every agent step in real time, grouped by prompt*
 
 ![Usage page](docs/images/usagepage.png)
 
@@ -36,9 +36,10 @@ Works with **Ollama Cloud** (no GPU needed) and **local Ollama** (for high-end s
 
 - **Dashboard** at `localhost:6969` — monitor live agent activity, manage agents, view memory, switch projects
 - **Commander agent** — orchestrates all work; routes to the right specialist, never builds without reviewing
-- **9 specialist agents** — researcher, coder, quick, reviewer, guardian, memory-keeper, teacher, vision, diagram
-- **Web search** — researcher uses SearXNG (self-hosted, started automatically via Docker) so searches stay private
+- **11 specialist agents** — researcher, coder, quick, reviewer, guardian, memory-keeper, teacher, vision, diagram, docs, test-writer
+- **Web search** — researcher uses [SearXNG](https://github.com/searxng/searxng) (self-hosted, started automatically via Docker) so searches stay private
 - **Security layer** — guardian strips API keys, tokens, and credentials from briefs before they reach the internet
+- **Persistent memory** — [opencode-mem](https://github.com/opencode-ai/opencode-mem) auto-captures memories from every session; Bacchetta also extracts structured memory and embeds it for semantic search
 
 ---
 
@@ -49,7 +50,7 @@ Works with **Ollama Cloud** (no GPU needed) and **local Ollama** (for high-end s
 | **Node.js 18+** | [nodejs.org](https://nodejs.org) |
 | **OpenCode** | `npm install -g opencode-ai` |
 | **Ollama** (local, for memory embeddings) | [ollama.com](https://ollama.com) |
-| **Ollama Cloud account** *(recommended)* | [ollama.com](https://ollama.com) — pay per second, no GPU needed |
+| **Ollama Cloud account** *(recommended)* | [ollama.com](https://ollama.com) — $20/month, no GPU needed |
 | **Docker Desktop** *(optional)* | [docker.com](https://www.docker.com/products/docker-desktop) — enables web search |
 
 ---
@@ -72,7 +73,7 @@ The installer walks you through everything:
 
 ### Ollama Cloud setup
 
-Select option 1 during install. You'll be asked for your API key from [ollama.com/settings/keys](https://ollama.com/settings/keys).
+Select option 1 during install. Ollama Cloud is a **$20/month subscription** that lets you run large models (Gemini, Kimi, GLM) via API without owning a GPU. You'll be asked for your API key from [ollama.com/settings/keys](https://ollama.com/settings/keys).
 
 The installer will print the exact command to save it as a permanent environment variable — no need to re-enter it each time.
 
@@ -100,7 +101,7 @@ Dashboard opens at **http://localhost:6969**
 
 Then use OpenCode either way:
 - Run `opencode` in any project folder as usual
-- Or open the dashboard → **Projects** → add a folder → **Start Session**
+- Or open the dashboard → **Projects** → add a folder → **Launch New**
 
 If you get a port conflict:
 
@@ -133,18 +134,20 @@ Commander has no file/bash tools itself — it can only delegate. This means it 
 
 ## Agents
 
-| Agent | What it does |
-|-------|-------------|
-| **commander** | Orchestrates everything — routes tasks, runs YAGNI checks, ensures reviewer always runs |
-| **guardian** | Sanitizes briefs — strips API keys, tokens, and credentials before they reach internet-connected agents |
-| **researcher** | Reads files, traces logic, searches the web via SearXNG |
-| **coder** | Multi-file implementation, new features, refactors |
-| **quick** | Single-file edits, config changes, small fixes |
-| **reviewer** | 9-category audit after every build — writes plan files for anything critical |
-| **memory-keeper** | Captures important context before it gets compressed out of the session |
-| **teacher** | Explains concepts, fetches and searches documentation |
-| **vision** | Interprets screenshots and images |
-| **diagram** | Generates `.drawio` architecture diagrams, flowcharts, ERDs |
+| Agent | Mode | What it does |
+|-------|------|-------------|
+| **commander** | primary | Orchestrates everything — routes tasks, runs YAGNI checks, ensures reviewer always runs |
+| **guardian** | subagent | Sanitizes briefs — strips API keys, tokens, and credentials before they reach internet-connected agents |
+| **researcher** | subagent | Reads files, traces logic, searches the web via SearXNG |
+| **coder** | subagent | Multi-file implementation, new features, refactors |
+| **quick** | subagent | Single-file edits, config changes, small fixes |
+| **reviewer** | subagent | 9-category audit after every build — writes plan files for anything critical |
+| **memory-keeper** | subagent | Captures important context before it gets compressed out of the session |
+| **teacher** | primary | Explains concepts from first principles, fetches and searches CF documentation |
+| **vision** | subagent | Interprets screenshots and images |
+| **diagram** | subagent | Generates `.drawio` architecture diagrams, flowcharts, ERDs |
+| **docs** | subagent | Writes and updates documentation files |
+| **test-writer** | subagent | Writes tests for new code — unit, integration, and edge cases |
 
 ![System prompt view](docs/images/system_prompt_dictionary.png)
 
@@ -171,11 +174,21 @@ Sensitive values are replaced with `[REDACTED: type]` before the brief reaches r
 
 ![Terminal showing provider setup](docs/images/termial-provider-setup.png)
 
-Bacchetta starts a SearXNG Docker container automatically on `bacchetta start`. SearXNG is a self-hosted meta-search engine — it queries Google, DuckDuckGo, Bing, GitHub, Stack Overflow, npm, and MDN, then returns results without tracking you.
+Bacchetta starts a [SearXNG](https://github.com/searxng/searxng) Docker container automatically on `bacchetta start`. SearXNG is a self-hosted meta-search engine — it queries Google, DuckDuckGo, Bing, GitHub, Stack Overflow, npm, and MDN, then returns results without tracking you.
 
 **Requires Docker Desktop.**
 
 On first start, Docker pulls the SearXNG image (~150MB, one-time). After that it starts in under a second. If you don't have Docker, everything else still works — the researcher just won't have web search.
+
+---
+
+## Memory
+
+Bacchetta layers two memory systems on top of OpenCode:
+
+**[opencode-mem](https://github.com/opencode-ai/opencode-mem)** — runs alongside OpenCode and automatically captures memories from every conversation. Visible in the dashboard as a live status indicator.
+
+**Bacchetta structured memory** — a background job extracts key facts from sessions as they go idle, embeds them with `bge-m3` (via local Ollama), and stores them in a SQLite vector database. Agents automatically get relevant past context injected into new sessions. Searchable from the Agents → Settings tab.
 
 ---
 
@@ -201,32 +214,9 @@ This will:
 | Plugin files | `~/.config/opencode/plugin/` |
 | Install manifest | `~/.config/opencode/bacchetta-manifest.json` |
 | opencode.json backup | `~/.config/opencode/opencode.json.bacchetta.bak` |
-
----
-
-## Pushing to GitHub
-
-```bash
-cd /path/to/bacchetta
-
-git init
-git add .
-git commit -m "feat: initial release v1.0.1"
-
-# Create a new repo at github.com, then:
-git remote add origin https://github.com/YOUR_USERNAME/bacchetta.git
-git branch -M main
-git push -u origin main
-```
-
----
-
-## Publishing to npm
-
-```bash
-npm login
-npm publish
-```
+| Session database | `~/.local/share/opencode/opencode.db` |
+| Structured memory | `~/.local/share/opencode/clause-memory/` |
+| Memory + RAG index | `~/.local/share/opencode/clause-memory.db`, `clause-rag.db` |
 
 ---
 
@@ -234,9 +224,21 @@ npm publish
 
 | Setup | Notes |
 |-------|-------|
-| **Ollama Cloud** | Recommended. Pay-per-second, no GPU needed. Sign up at [ollama.com](https://ollama.com) |
-| **Local Ollama** | Free, runs on your machine. 16GB+ RAM/VRAM recommended |
-| Any OpenCode provider | Swap models any time in `~/.config/opencode/opencode.json` |
+| **Ollama Cloud** | Recommended. $20/month subscription, no GPU needed. Sign up at [ollama.com](https://ollama.com) |
+| **Local Ollama** | Free, runs on your machine. 16GB+ RAM/VRAM recommended for the full agent stack |
+| **Any OpenCode provider** | Swap models any time in `~/.config/opencode/opencode.json` |
+
+---
+
+## Built on
+
+| Project | What it provides |
+|---------|-----------------|
+| [opencode-ai/opencode](https://github.com/opencode-ai/opencode) | The AI coding engine Bacchetta runs on top of |
+| [opencode-ai/opencode-mem](https://github.com/opencode-ai/opencode-mem) | Session memory capture service |
+| [searxng/searxng](https://github.com/searxng/searxng) | Self-hosted meta-search engine for the researcher agent |
+| [Ollama](https://ollama.com) | Local model runtime + Ollama Cloud API |
+| [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) | SQLite for the RAG and memory databases |
 
 ---
 

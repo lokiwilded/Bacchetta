@@ -267,7 +267,7 @@ async function cmdInstall() {
   console.log('  Provider setup:');
   const providerChoice = await prompt(
     '  ? How are you running AI models?\n' +
-    '    1) Ollama Cloud  (pay-per-second, cloud models at ollama.com)\n' +
+    '    1) Ollama Cloud  ($20/month subscription, cloud models at ollama.com)\n' +
     '    2) Local Ollama  (free, your own GPU)\n' +
     '  > '
   );
