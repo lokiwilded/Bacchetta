@@ -239,6 +239,13 @@ This will:
 | [searxng/searxng](https://github.com/searxng/searxng) | Self-hosted meta-search engine for the researcher agent |
 | [Ollama](https://ollama.com) | Local model runtime + Ollama Cloud API |
 | [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) | SQLite for the RAG and memory databases |
+| [React](https://github.com/facebook/react) | Dashboard UI |
+| [Recharts](https://github.com/recharts/recharts) | Usage charts and graphs |
+| [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) | Dashboard styling |
+| [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) | 7-rung YAGNI decision ladder embedded in coder, quick, and reviewer agents |
+| [shadcn/improve](https://github.com/shadcn/improve) | 9-category audit structure and self-contained plan file format used by the reviewer agent |
+| [Agents365-ai/drawio-skill](https://github.com/Agents365-ai/drawio-skill) | Diagram agent approach: 6 presets, self-checking loop, code visualization, PNG export |
+| [nvidia/skillspector](https://github.com/nvidia/skillspector) | Security scanning patterns informing the guardian agent's credential detection |
 
 ---
 
